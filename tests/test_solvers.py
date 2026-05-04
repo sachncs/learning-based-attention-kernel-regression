@@ -76,10 +76,7 @@ def test_jacobi_pcg():
 def test_gd_convergence():
     """Gradient descent should converge for well-conditioned systems."""
     n = 20
-    a_dense = (
-        torch.eye(n, dtype=torch.float64) * 2.0
-        + torch.ones(n, n, dtype=torch.float64) * 0.1
-    )
+    a_dense = torch.eye(n, dtype=torch.float64) * 2.0 + torch.ones(n, n, dtype=torch.float64) * 0.1
     b = torch.randn(n, dtype=torch.float64)
 
     def op(v):

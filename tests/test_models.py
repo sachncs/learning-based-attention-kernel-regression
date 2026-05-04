@@ -159,9 +159,7 @@ def test_bilevel_runs_and_produces_fitted_model():
     base_pred = model.predict(x_val)
     base_loss = torch.mean((base_pred - y_val) ** 2).item()
 
-    model.fit_bilevel(
-        x_train, y_train, x_val, y_val, lr=5e-3, epochs=5, patience=3
-    )
+    model.fit_bilevel(x_train, y_train, x_val, y_val, lr=5e-3, epochs=5, patience=3)
 
     assert model.alpha is not None
     bilevel_pred = model.predict(x_val)
@@ -192,9 +190,7 @@ def test_uncertainty_aware_runs_and_produces_fitted_model():
 
     assert model.alpha is not None
 
-    model.fit_uncertainty_aware(
-        x, y, lr=1e-2, epochs=10, beta=0.1, variance_subset=0.3, patience=3
-    )
+    model.fit_uncertainty_aware(x, y, lr=1e-2, epochs=10, beta=0.1, variance_subset=0.3, patience=3)
 
     assert model.alpha is not None
     x_test = torch.rand(10, 2, dtype=torch.float64) * 100.0

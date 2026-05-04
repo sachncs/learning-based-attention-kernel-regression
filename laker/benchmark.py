@@ -63,9 +63,7 @@ class SolverBenchmark:
 
         """
         n = self.rhs.shape[0]
-        pcg = PreconditionedConjugateGradient(
-            tol=self.tol, max_iter=self.max_iter, verbose=False
-        )
+        pcg = PreconditionedConjugateGradient(tol=self.tol, max_iter=self.max_iter, verbose=False)
 
         start = time.perf_counter()
         if self.preconditioner is not None:
@@ -76,8 +74,7 @@ class SolverBenchmark:
 
         rhs_norm = torch.linalg.norm(self.rhs).item()
         final_res = (
-            torch.linalg.norm(self.operator(solution) - self.rhs).item()
-            / rhs_norm
+            torch.linalg.norm(self.operator(solution) - self.rhs).item() / rhs_norm
             if rhs_norm > 0
             else 0.0
         )
@@ -90,18 +87,11 @@ class SolverBenchmark:
             G_alpha_sol = self.operator(solution)
             resid = G_alpha_sol - y
             r_norm_sq = torch.dot(resid, resid).item()
-            lambda_term = (
-                self.lambda_reg
-                * torch.dot(solution, self.operator(solution)).item()
-            )
+            lambda_term = self.lambda_reg * torch.dot(solution, self.operator(solution)).item()
             obj_sol = r_norm_sq + lambda_term
 
             obj_ref = self.lambda_reg * torch.dot(y, alpha_star).item()
-            obj_gap = (
-                abs(obj_sol - obj_ref) / abs(obj_ref)
-                if abs(obj_ref) > 1e-12
-                else None
-            )
+            obj_gap = abs(obj_sol - obj_ref) / abs(obj_ref) if abs(obj_ref) > 1e-12 else None
 
         return BenchmarkResult(
             name=self.name,
@@ -141,9 +131,7 @@ class BaselineBenchmark:
 
         """
         n = self.embeddings.shape[0]
-        operator = AttentionKernelOperator(
-            self.embeddings, lambda_reg=self.lambda_reg
-        )
+        operator = AttentionKernelOperator(self.embeddings, lambda_reg=self.lambda_reg)
 
         results = []
 

@@ -118,9 +118,7 @@ class BilevelOptimizer:
             with torch.no_grad():
                 val_embeddings, _ = self.core.compute_embeddings(x_val)
                 val_embeddings = (
-                    val_embeddings[0]
-                    if isinstance(val_embeddings, tuple)
-                    else val_embeddings
+                    val_embeddings[0] if isinstance(val_embeddings, tuple) else val_embeddings
                 )
             k_val = kernel_op.kernel_eval(val_embeddings, embeddings)
             y_val_pred = k_val @ alpha_detached

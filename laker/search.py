@@ -85,24 +85,14 @@ class HyperparameterSearch:
                             y[train_idx],
                             x0=x0 if warm_start else None,
                         )
-                        x_val_embed = x[val_idx].to(
-                            dtype=self.core.embedding_dtype
-                        )
+                        x_val_embed = x[val_idx].to(dtype=self.core.embedding_dtype)
                         with torch.no_grad():
-                            val_embeddings = regressor.embedding_model(
-                                x_val_embed
-                            )
+                            val_embeddings = regressor.embedding_model(x_val_embed)
                         if self.core.embedding_dtype != self.core.dtype:
-                            val_embeddings = val_embeddings.to(
-                                dtype=self.core.dtype
-                            )
-                        k_val = kernel_op.kernel_eval(
-                            val_embeddings, train_embeddings
-                        )
+                            val_embeddings = val_embeddings.to(dtype=self.core.dtype)
+                        k_val = kernel_op.kernel_eval(val_embeddings, train_embeddings)
                         y_val_pred = k_val @ alpha
-                        rmse = torch.sqrt(
-                            torch.mean((y_val_pred - y[val_idx]) ** 2)
-                        ).item()
+                        rmse = torch.sqrt(torch.mean((y_val_pred - y[val_idx]) ** 2)).item()
                     except (RuntimeError, ValueError) as exc:
                         rmse = float("inf")
                         if self.core.verbose:

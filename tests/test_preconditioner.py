@@ -101,9 +101,7 @@ def test_adaptive_probes_not_catastrophically_worse():
     # Construct an embedding with a controlled spectrum gap via SVD.
     u = torch.linalg.qr(torch.randn(n, de, device=device, dtype=dtype))[0]
     v = torch.linalg.qr(torch.randn(de, de, device=device, dtype=dtype))[0]
-    s = torch.tensor(
-        [2.0, 1.8, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1], device=device, dtype=dtype
-    )
+    s = torch.tensor([2.0, 1.8, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1], device=device, dtype=dtype)
     e = u @ torch.diag(s) @ v
     op = AttentionKernelOperator(e, lambda_reg=1e-3)
 

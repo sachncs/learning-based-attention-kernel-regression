@@ -23,9 +23,7 @@ def test_position_embedding_forward_1d():
 
 def test_position_embedding_extra_repr():
     """extra_repr should return a non-empty string with key parameters."""
-    embed = PositionEmbedding(
-        input_dim=2, embedding_dim=8, num_fourier=16, sigma=5.0, seed=42
-    )
+    embed = PositionEmbedding(input_dim=2, embedding_dim=8, num_fourier=16, sigma=5.0, seed=42)
     repr_str = embed.extra_repr()
     assert "input_dim=2" in repr_str
     assert "embedding_dim=8" in repr_str

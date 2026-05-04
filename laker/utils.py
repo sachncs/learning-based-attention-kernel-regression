@@ -131,9 +131,7 @@ class GPSurrogate:
             + numpy.sum(x2**2, axis=1)
             - 2 * numpy.dot(x1, x2.T)
         )
-        return self.sigma_f**2 * numpy.exp(
-            -0.5 * sqdist / (self.length_scale**2 + 1e-12)
-        )
+        return self.sigma_f**2 * numpy.exp(-0.5 * sqdist / (self.length_scale**2 + 1e-12))
 
     def fit(self, X: numpy.ndarray, y: numpy.ndarray) -> None:
         """Fit GP to observations."""
@@ -154,9 +152,7 @@ class GPSurrogate:
         K = self.kernel(self.X, self.X)
         K[numpy.diag_indices_from(K)] += self.sigma_n**2
         self.L = numpy.linalg.cholesky(K + 1e-8 * numpy.eye(K.shape[0]))
-        self.alpha_vec = numpy.linalg.solve(
-            self.L.T, numpy.linalg.solve(self.L, self.y)
-        )
+        self.alpha_vec = numpy.linalg.solve(self.L.T, numpy.linalg.solve(self.L, self.y))
 
     def marginal_likelihood(self, candidate_length_scale: float) -> float:
         """Compute log marginal likelihood for a candidate length scale."""
@@ -177,9 +173,7 @@ class GPSurrogate:
         self.length_scale = old_length_scale
         return ml
 
-    def predict(
-        self, X_new: numpy.ndarray
-    ) -> tuple[numpy.ndarray, numpy.ndarray]:
+    def predict(self, X_new: numpy.ndarray) -> tuple[numpy.ndarray, numpy.ndarray]:
         """Return posterior mean and variance."""
         X_new_t = self.transform(X_new)
         K_s = self.kernel(self.X, X_new_t)
@@ -195,9 +189,7 @@ class GPSurrogate:
         var = var * (self.y_std**2)
         return mu, var
 
-    def expected_improvement(
-        self, X_new: numpy.ndarray, xi: float = 0.01
-    ) -> numpy.ndarray:
+    def expected_improvement(self, X_new: numpy.ndarray, xi: float = 0.01) -> numpy.ndarray:
         """Compute the Expected Improvement acquisition function."""
         mu, var = self.predict(X_new)
         sigma = numpy.sqrt(var)
@@ -227,7 +219,5 @@ def scipy_norm_cdf(x: numpy.ndarray) -> numpy.ndarray:
     sign = numpy.sign(x)
     x = numpy.abs(x) / numpy.sqrt(2.0)
     t = 1.0 / (1.0 + p * x)
-    y = 1.0 - (
-        ((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t * numpy.exp(-x * x)
-    )
+    y = 1.0 - (((((a5 * t + a4) * t + a3) * t + a2) * t + a1) * t * numpy.exp(-x * x))
     return 0.5 * (1.0 + sign * y)

@@ -43,12 +43,8 @@ def test_twoscale_alpha_extremes():
     y_local = twoscale_local.matvec(x)
 
     # Compare against the internal sub-operators (same random state)
-    torch.testing.assert_close(
-        y_global, twoscale_global.global_op.matvec(x), rtol=1e-5, atol=1e-6
-    )
-    torch.testing.assert_close(
-        y_local, twoscale_local.local_op.matvec(x), rtol=1e-5, atol=1e-6
-    )
+    torch.testing.assert_close(y_global, twoscale_global.global_op.matvec(x), rtol=1e-5, atol=1e-6)
+    torch.testing.assert_close(y_local, twoscale_local.local_op.matvec(x), rtol=1e-5, atol=1e-6)
 
 
 def test_twoscale_matvec_linearity():
@@ -188,16 +184,12 @@ def test_continuation_schedule_monotonic():
         verbose=False,
     )
 
-    model.fit_continuation(
-        x, y, lambda_max=1.0, lambda_min=1e-2, n_stages=5, reuse_precond=True
-    )
+    model.fit_continuation(x, y, lambda_max=1.0, lambda_min=1e-2, n_stages=5, reuse_precond=True)
 
     path = model.path_
     lambdas = path["lambda_reg"]
     for i in range(len(lambdas) - 1):
-        assert (
-            lambdas[i] > lambdas[i + 1]
-        ), "Schedule must be strictly decreasing"
+        assert lambdas[i] > lambdas[i + 1], "Schedule must be strictly decreasing"
 
     assert abs(lambdas[-1] - 1e-2) < 1e-10, "Final lambda must match lambda_min"
 
@@ -221,9 +213,7 @@ def test_continuation_warmstart_reduces_iters():
         verbose=False,
     )
 
-    model.fit_continuation(
-        x, y, lambda_max=1.0, lambda_min=1e-2, n_stages=5, reuse_precond=True
-    )
+    model.fit_continuation(x, y, lambda_max=1.0, lambda_min=1e-2, n_stages=5, reuse_precond=True)
 
     path = model.path_
     iters = path["pcg_iters"]
@@ -371,9 +361,7 @@ def test_hypergradient_finite_difference():
     alpha_minus = y / (1.0 + theta_minus)
     loss_minus = 0.5 * torch.sum(alpha_minus**2)
 
-    fd = torch.tensor(
-        [(loss_plus - loss_minus).item() / (2.0 * eps)], dtype=torch.float64
-    )
+    fd = torch.tensor([(loss_plus - loss_minus).item() / (2.0 * eps)], dtype=torch.float64)
     torch.testing.assert_close(hg, fd, rtol=1e-4, atol=1e-6)
 
 
@@ -385,9 +373,7 @@ def test_residual_corrector_train_eval_consistency():
     n = 20
     x = torch.randn(n, 3, dtype=torch.float32)
 
-    corrector = ResidualCorrector(
-        input_dim=3, output_dim=1, hidden_dim=16, dropout=0.5
-    )
+    corrector = ResidualCorrector(input_dim=3, output_dim=1, hidden_dim=16, dropout=0.5)
     corrector.eval()
     with torch.no_grad():
         out_eval = corrector(x).squeeze()
@@ -449,9 +435,7 @@ def test_kernel_operator_diagonal_matches_dense():
 
     operators = [
         AttentionKernelOperator(e, lambda_reg=lam, dtype=dtype),
-        NystromAttentionKernelOperator(
-            e, lambda_reg=lam, num_landmarks=15, dtype=dtype
-        ),
+        NystromAttentionKernelOperator(e, lambda_reg=lam, num_landmarks=15, dtype=dtype),
         TwoScaleAttentionKernelOperator(
             e,
             lambda_reg=lam,
@@ -479,9 +463,7 @@ def test_ski_matvec_consistency():
     e = torch.randn(n, de, dtype=dtype)
     lam = 1e-2
 
-    op = SKIAttentionKernelOperator(
-        e, lambda_reg=lam, grid_size=32, dtype=dtype
-    )
+    op = SKIAttentionKernelOperator(e, lambda_reg=lam, grid_size=32, dtype=dtype)
     x = torch.randn(n, dtype=dtype)
     y_ski = op.matvec(x)
     y_dense = op.to_dense() @ x

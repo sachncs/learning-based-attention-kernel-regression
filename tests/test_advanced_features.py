@@ -343,16 +343,10 @@ def test_learned_embeddings():
         verbose=False,
     )
     model.fit(x, y)
-    initial_res = torch.linalg.norm(
-        model.kernel_operator.matvec(model.alpha) - y
-    ).item()
+    initial_res = torch.linalg.norm(model.kernel_operator.matvec(model.alpha) - y).item()
 
-    model.fit_learned_embeddings(
-        x, y, lr=1e-2, epochs=20, rebuild_freq=5, patience=10
-    )
-    final_res = torch.linalg.norm(
-        model.kernel_operator.matvec(model.alpha) - y
-    ).item()
+    model.fit_learned_embeddings(x, y, lr=1e-2, epochs=20, rebuild_freq=5, patience=10)
+    final_res = torch.linalg.norm(model.kernel_operator.matvec(model.alpha) - y).item()
     assert final_res <= initial_res
 
 
@@ -365,9 +359,7 @@ def test_distributed_fallback():
     e = torch.randn(n, 10, dtype=torch.float64)
     x = torch.randn(n, dtype=torch.float64)
 
-    dist_op = DistributedAttentionKernelOperator(
-        e, lambda_reg=1e-2, dtype=torch.float64
-    )
+    dist_op = DistributedAttentionKernelOperator(e, lambda_reg=1e-2, dtype=torch.float64)
     assert dist_op.single_device
 
     y_dist = dist_op.matvec(x)

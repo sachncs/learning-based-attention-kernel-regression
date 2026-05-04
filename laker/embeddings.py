@@ -80,9 +80,7 @@ class PositionEmbedding(nn.Module):
         )
         self.register_buffer(
             "phase",
-            torch.rand(num_fourier, generator=gen, device=device, dtype=dtype)
-            * 2.0
-            * math.pi,
+            torch.rand(num_fourier, generator=gen, device=device, dtype=dtype) * 2.0 * math.pi,
         )
 
         # 2. MLP weights are initialised manually with a local Generator so the

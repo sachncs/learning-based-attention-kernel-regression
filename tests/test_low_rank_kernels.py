@@ -18,9 +18,7 @@ def test_nystrom_matvec_consistency():
     lam = 1e-2
 
     exact = AttentionKernelOperator(e, lambda_reg=lam, dtype=dtype)
-    approx = NystromAttentionKernelOperator(
-        e, lambda_reg=lam, num_landmarks=50, dtype=dtype
-    )
+    approx = NystromAttentionKernelOperator(e, lambda_reg=lam, num_landmarks=50, dtype=dtype)
 
     x = torch.randn(n, dtype=dtype)
     y_exact = exact.matvec(x)
@@ -60,9 +58,7 @@ def test_rff_matvec_consistency():
     lam = 1e-2
 
     exact = AttentionKernelOperator(e, lambda_reg=lam, dtype=dtype)
-    approx = RandomFeatureAttentionKernelOperator(
-        e, lambda_reg=lam, num_features=200, dtype=dtype
-    )
+    approx = RandomFeatureAttentionKernelOperator(e, lambda_reg=lam, num_features=200, dtype=dtype)
 
     x = torch.randn(n, dtype=dtype)
     y_exact = exact.matvec(x)
@@ -78,9 +74,7 @@ def test_rff_diagonal_positive():
     n = 50
     de = 4
     e = torch.randn(n, de)
-    op = RandomFeatureAttentionKernelOperator(
-        e, lambda_reg=1e-2, num_features=100
-    )
+    op = RandomFeatureAttentionKernelOperator(e, lambda_reg=1e-2, num_features=100)
     diag = op.diagonal()
     assert torch.all(diag > 0).item()
 
@@ -90,8 +84,6 @@ def test_rff_to_dense_shape():
     n = 30
     de = 4
     e = torch.randn(n, de)
-    op = RandomFeatureAttentionKernelOperator(
-        e, lambda_reg=1e-2, num_features=50
-    )
+    op = RandomFeatureAttentionKernelOperator(e, lambda_reg=1e-2, num_features=50)
     dense = op.to_dense()
     assert dense.shape == (n, n)

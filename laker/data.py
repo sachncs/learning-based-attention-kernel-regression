@@ -59,13 +59,9 @@ class RadioFieldGenerator:
 
         """
         if locations.dim() != 2:
-            raise ValueError(
-                f"locations must be 2-D, got shape {locations.shape}"
-            )
+            raise ValueError(f"locations must be 2-D, got shape {locations.shape}")
         if transmitters.dim() != 2:
-            raise ValueError(
-                f"transmitters must be 2-D, got shape {transmitters.shape}"
-            )
+            raise ValueError(f"transmitters must be 2-D, got shape {transmitters.shape}")
         if powers.dim() != 1:
             raise ValueError(f"powers must be 1-D, got shape {powers.shape}")
         if transmitters.shape[0] != powers.shape[0]:
@@ -86,25 +82,17 @@ class RadioFieldGenerator:
             gen = None
 
         n = locations.shape[0]
-        rss_clean = torch.zeros(
-            n, device=locations.device, dtype=locations.dtype
-        )
+        rss_clean = torch.zeros(n, device=locations.device, dtype=locations.dtype)
 
-        for transmitter_location, transmitter_power in zip(
-            transmitters, powers
-        ):
+        for transmitter_location, transmitter_power in zip(transmitters, powers):
             distances = torch.norm(locations - transmitter_location, dim=1)
             distances = distances.clamp(min=self.reference_distance)
             path_loss = (
-                10.0
-                * self.path_loss_exponent
-                * torch.log10(distances / self.reference_distance)
+                10.0 * self.path_loss_exponent * torch.log10(distances / self.reference_distance)
             )
             rss_clean += transmitter_power - path_loss
 
-        noise = torch.randn(
-            n, device=locations.device, dtype=locations.dtype, generator=gen
-        )
+        noise = torch.randn(n, device=locations.device, dtype=locations.dtype, generator=gen)
         rss_noisy = rss_clean + self.shadow_sigma * noise
         logger.info(
             "Generated radio field: n=%d, tx=%d, path_loss_exp=%.1f, shadow_sigma=%.2f",

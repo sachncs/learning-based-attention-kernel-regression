@@ -100,9 +100,7 @@ class LAKERRegressor:
         """Initialise the LAKER regressor."""
         # --- validation (exactly as before) --------------------------------
         if embedding_dim <= 0:
-            raise ValueError(
-                f"embedding_dim must be positive, got {embedding_dim}"
-            )
+            raise ValueError(f"embedding_dim must be positive, got {embedding_dim}")
         if lambda_reg <= 0:
             raise ValueError(f"lambda_reg must be positive, got {lambda_reg}")
         if gamma < 0:
@@ -112,17 +110,13 @@ class LAKERRegressor:
         if not 0 <= base_rho <= 1:
             raise ValueError(f"base_rho must be in [0, 1], got {base_rho}")
         if cccp_max_iter <= 0:
-            raise ValueError(
-                f"cccp_max_iter must be positive, got {cccp_max_iter}"
-            )
+            raise ValueError(f"cccp_max_iter must be positive, got {cccp_max_iter}")
         if cccp_tol <= 0:
             raise ValueError(f"cccp_tol must be positive, got {cccp_tol}")
         if pcg_tol <= 0:
             raise ValueError(f"pcg_tol must be positive, got {pcg_tol}")
         if pcg_max_iter <= 0:
-            raise ValueError(
-                f"pcg_max_iter must be positive, got {pcg_max_iter}"
-            )
+            raise ValueError(f"pcg_max_iter must be positive, got {pcg_max_iter}")
         if kernel_approx not in (
             None,
             "nystrom",
@@ -141,25 +135,17 @@ class LAKERRegressor:
         if grid_size is not None and grid_size < 2:
             raise ValueError(f"grid_size must be at least 2, got {grid_size}")
         if not 0.0 <= twoscale_alpha <= 1.0:
-            raise ValueError(
-                f"twoscale_alpha must be in [0, 1], got {twoscale_alpha}"
-            )
+            raise ValueError(f"twoscale_alpha must be in [0, 1], got {twoscale_alpha}")
         if landmark_method not in ("greedy", "leverage"):
             raise ValueError(
                 f"landmark_method must be 'greedy' or 'leverage', got {landmark_method}"
             )
         if landmark_pilot_size <= 0:
-            raise ValueError(
-                f"landmark_pilot_size must be positive, got {landmark_pilot_size}"
-            )
+            raise ValueError(f"landmark_pilot_size must be positive, got {landmark_pilot_size}")
         if preconditioner not in ("cccp", "adaptive"):
-            raise ValueError(
-                f"preconditioner must be 'cccp' or 'adaptive', got {preconditioner}"
-            )
+            raise ValueError(f"preconditioner must be 'cccp' or 'adaptive', got {preconditioner}")
         if spectral_knots <= 0:
-            raise ValueError(
-                f"spectral_knots must be positive, got {spectral_knots}"
-            )
+            raise ValueError(f"spectral_knots must be positive, got {spectral_knots}")
 
         # --- helpers (bypass __setattr__) -----------------------------------
         object.__setattr__(
@@ -218,9 +204,7 @@ class LAKERRegressor:
         """Delegate hyperparameter access to the core."""
         if name in self._HYPERPARAMS:
             return getattr(self._core, name)
-        raise AttributeError(
-            f"'{type(self).__name__}' has no attribute '{name}'"
-        )
+        raise AttributeError(f"'{type(self).__name__}' has no attribute '{name}'")
 
     def __setattr__(self, name: str, value: Any) -> None:
         """Delegate hyperparameter writes to the core."""
@@ -378,9 +362,7 @@ class LAKERRegressor:
         """Update the model with one or more new observations."""
         x_new = to_tensor(x_new, device=self.device, dtype=self.dtype)
         y_new = to_tensor(y_new, device=self.device, dtype=self.dtype).squeeze()
-        return self._streaming.partial_fit(
-            self, x_new, y_new, forgetting_factor, rebuild_threshold
-        )
+        return self._streaming.partial_fit(self, x_new, y_new, forgetting_factor, rebuild_threshold)
 
     def fit_path(
         self,
@@ -392,9 +374,7 @@ class LAKERRegressor:
         """Fit a regularization path over a sequence of lambda_reg values."""
         x = to_tensor(x, device=self.device, dtype=self.dtype)
         y = to_tensor(y, device=self.device, dtype=self.dtype).squeeze()
-        return self._streaming.fit_path(
-            self, x, y, lambda_reg_grid, reuse_precond
-        )
+        return self._streaming.fit_path(self, x, y, lambda_reg_grid, reuse_precond)
 
     def fit_continuation(
         self,
@@ -427,9 +407,7 @@ class LAKERRegressor:
         """Optimise the embedding MLP weights end-to-end on the regression objective."""
         x = to_tensor(x, device=self.device, dtype=self.dtype)
         y = to_tensor(y, device=self.device, dtype=self.dtype).squeeze()
-        return self._trainer.fit_learned_embeddings(
-            self, x, y, lr, epochs, rebuild_freq, patience
-        )
+        return self._trainer.fit_learned_embeddings(self, x, y, lr, epochs, rebuild_freq, patience)
 
     def fit_residual_corrector(
         self,
@@ -460,14 +438,10 @@ class LAKERRegressor:
     ) -> "LAKERRegressor":
         """Optimise hyperparameters via bilevel learning with implicit differentiation."""
         x_train = to_tensor(x_train, device=self.device, dtype=self.dtype)
-        y_train = to_tensor(
-            y_train, device=self.device, dtype=self.dtype
-        ).squeeze()
+        y_train = to_tensor(y_train, device=self.device, dtype=self.dtype).squeeze()
         x_val = to_tensor(x_val, device=self.device, dtype=self.dtype)
         y_val = to_tensor(y_val, device=self.device, dtype=self.dtype).squeeze()
-        return self._trainer.fit_bilevel(
-            self, x_train, y_train, x_val, y_val, lr, epochs, patience
-        )
+        return self._trainer.fit_bilevel(self, x_train, y_train, x_val, y_val, lr, epochs, patience)
 
     def fit_uncertainty_aware(
         self,
@@ -527,9 +501,7 @@ class LAKERRegressor:
         """Return the condition number of the preconditioned system."""
         if self.preconditioner is None or self.kernel_operator is None:
             raise RuntimeError("Model has not been fitted.")
-        return self._core.condition_number(
-            self.kernel_operator, self.preconditioner
-        )
+        return self._core.condition_number(self.kernel_operator, self.preconditioner)
 
     # ------------------------------------------------------------------
     # Sklearn compatibility
@@ -560,9 +532,7 @@ class LAKERRegressor:
             "landmark_pilot_size": self.landmark_pilot_size,
             "preconditioner": self.preconditioner_strategy,
             "embedding_dtype": (
-                str(self.embedding_dtype).replace("torch.", "")
-                if self.embedding_dtype
-                else None
+                str(self.embedding_dtype).replace("torch.", "") if self.embedding_dtype else None
             ),
             "device": str(self.device),
             "dtype": str(self.dtype).replace("torch.", ""),
@@ -574,9 +544,7 @@ class LAKERRegressor:
         """Set estimator parameters for sklearn compatibility."""
         for key, value in params.items():
             if not hasattr(self, key):
-                raise ValueError(
-                    f"Invalid parameter {key!r} for LAKERRegressor"
-                )
+                raise ValueError(f"Invalid parameter {key!r} for LAKERRegressor")
             setattr(self, key, value)
         return self
 

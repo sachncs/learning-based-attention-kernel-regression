@@ -31,9 +31,7 @@ class StreamingUpdater:
     ) -> "LAKERRegressor":
         """Update the model with one or more new observations."""
         if regressor.alpha is None or regressor.embeddings is None:
-            raise RuntimeError(
-                "Model has not been fitted. Call fit() before partial_fit()."
-            )
+            raise RuntimeError("Model has not been fitted. Call fit() before partial_fit().")
 
         if x_new.dim() != 2:
             raise ValueError(f"x_new must be 2-D, got shape {x_new.shape}")
@@ -59,20 +57,14 @@ class StreamingUpdater:
             new_embeddings = new_embeddings.to(dtype=self.core.dtype)
 
         old_n = regressor.embeddings.shape[0]
-        regressor.embeddings = torch.cat(
-            [regressor.embeddings, new_embeddings], dim=0
-        )
+        regressor.embeddings = torch.cat([regressor.embeddings, new_embeddings], dim=0)
 
-        regressor.kernel_operator = self.core.build_kernel_operator(
-            regressor.embeddings
-        )
+        regressor.kernel_operator = self.core.build_kernel_operator(regressor.embeddings)
 
         old_alpha = regressor.alpha * forgetting_factor
         y_old = getattr(regressor, "y_train", None)
         if y_old is None:
-            y_old = torch.zeros(
-                old_n, device=self.core.device, dtype=self.core.dtype
-            )
+            y_old = torch.zeros(old_n, device=self.core.device, dtype=self.core.dtype)
         y_extended = torch.cat([y_old, y_new])
 
         x0 = torch.cat(
@@ -136,9 +128,7 @@ class StreamingUpdater:
         precond = None
 
         for lambda_reg_value in sorted_lambdas:
-            kernel_op = self.core.build_kernel_operator(
-                embeddings, lambda_reg=lambda_reg_value
-            )
+            kernel_op = self.core.build_kernel_operator(embeddings, lambda_reg=lambda_reg_value)
             if precond is None or not reuse_precond:
                 precond = self.core.build_preconditioner(
                     kernel_op.matvec,
@@ -151,8 +141,7 @@ class StreamingUpdater:
             alphas.append(alpha)
             pcg_iters.append(iters)
             final_res = (
-                torch.linalg.norm(kernel_op.matvec(alpha) - y).item()
-                / torch.linalg.norm(y).item()
+                torch.linalg.norm(kernel_op.matvec(alpha) - y).item() / torch.linalg.norm(y).item()
             )
             rel_reses.append(final_res)
             x0 = alpha.clone()

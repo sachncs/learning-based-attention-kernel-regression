@@ -11,12 +11,8 @@ from laker.models import LAKERRegressor
 
 def test_position_embedding_determinism():
     """PositionEmbedding with same seed should produce identical weights."""
-    emb1 = PositionEmbedding(
-        input_dim=2, embedding_dim=10, seed=42, dtype=torch.float64
-    )
-    emb2 = PositionEmbedding(
-        input_dim=2, embedding_dim=10, seed=42, dtype=torch.float64
-    )
+    emb1 = PositionEmbedding(input_dim=2, embedding_dim=10, seed=42, dtype=torch.float64)
+    emb2 = PositionEmbedding(input_dim=2, embedding_dim=10, seed=42, dtype=torch.float64)
 
     x = torch.randn(5, 2, dtype=torch.float64)
     with torch.no_grad():
@@ -143,7 +139,4 @@ def test_low_rank_save_load():
 
     loaded = LAKERRegressor.load(path)
     assert loaded.kernel_approx == "nystrom"
-    assert (
-        loaded.kernel_operator.__class__.__name__
-        == "NystromAttentionKernelOperator"
-    )
+    assert loaded.kernel_operator.__class__.__name__ == "NystromAttentionKernelOperator"

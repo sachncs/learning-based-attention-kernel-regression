@@ -26,9 +26,7 @@ def test_visualizer_radio_map_to_image_with_extent():
     """Visualizer.radio_map_to_image should accept extent parameter."""
     grid_size = 4
     preds = torch.randn(grid_size * grid_size)
-    img = Visualizer().radio_map_to_image(
-        preds, grid_size, extent=(0, 100, 0, 100)
-    )
+    img = Visualizer().radio_map_to_image(preds, grid_size, extent=(0, 100, 0, 100))
     assert img.shape == (grid_size, grid_size)
 
 
@@ -48,9 +46,7 @@ def test_visualizer_plot_radio_map_with_bounds():
     pytest.importorskip("matplotlib")
     grid_size = 4
     preds = torch.randn(grid_size * grid_size)
-    fig, ax = Visualizer(figsize=(4, 4)).plot_radio_map(
-        preds, grid_size, vmin=-2.0, vmax=2.0
-    )
+    fig, ax = Visualizer(figsize=(4, 4)).plot_radio_map(preds, grid_size, vmin=-2.0, vmax=2.0)
     assert fig is not None
     assert ax is not None
 

@@ -93,13 +93,9 @@ class PreconditionedConjugateGradient:
             return x
 
         if rhs.dim() == 1:
-            return self.solve_1d(
-                operator, preconditioner, rhs, x, r, z, p, rhs_norm, max_iter
-            )
+            return self.solve_1d(operator, preconditioner, rhs, x, r, z, p, rhs_norm, max_iter)
         else:
-            return self.solve_2d(
-                operator, preconditioner, rhs, x, r, z, p, rhs_norm, max_iter
-            )
+            return self.solve_2d(operator, preconditioner, rhs, x, r, z, p, rhs_norm, max_iter)
 
     def solve_1d(
         self,
@@ -143,10 +139,7 @@ class PreconditionedConjugateGradient:
                 x.add_(p, alpha=alpha)
                 r.add_(matrix_vector_product, alpha=-alpha)
 
-            if (
-                self.restart_freq is not None
-                and (iteration + 1) % self.restart_freq == 0
-            ):
+            if self.restart_freq is not None and (iteration + 1) % self.restart_freq == 0:
                 r = rhs - operator(x)
 
             self.residual_norm = torch.linalg.norm(r).item()
@@ -221,10 +214,7 @@ class PreconditionedConjugateGradient:
                 x.add_(p * alpha.unsqueeze(0))
                 r.add_(matrix_vector_product * (-alpha.unsqueeze(0)))
 
-            if (
-                self.restart_freq is not None
-                and (iteration + 1) % self.restart_freq == 0
-            ):
+            if self.restart_freq is not None and (iteration + 1) % self.restart_freq == 0:
                 r = rhs - operator(x)
 
             self.residual_norm = torch.linalg.norm(r).item()
@@ -318,9 +308,7 @@ class GradientDescent:
             if rel_res <= self.tol:
                 self.iterations = iteration + 1
                 if self.verbose:
-                    logger.info(
-                        "GD converged in %d iterations", self.iterations
-                    )
+                    logger.info("GD converged in %d iterations", self.iterations)
                 return x
             x = x + eta * r
 

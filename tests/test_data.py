@@ -74,9 +74,7 @@ def test_generate_radio_field_mismatched_tx_powers():
     locs = torch.rand(5, 2)
     tx = torch.tensor([[1.0, 1.0], [2.0, 2.0]])
     pwr = torch.tensor([-40.0])
-    with pytest.raises(
-        ValueError, match="transmitters and powers must have same length"
-    ):
+    with pytest.raises(ValueError, match="transmitters and powers must have same length"):
         generate_radio_field(locs, tx, pwr)
 
 

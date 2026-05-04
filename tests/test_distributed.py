@@ -13,9 +13,7 @@ def test_distributed_single_device_fallback():
     e = torch.randn(n, 8, dtype=torch.float64)
     x = torch.randn(n, dtype=torch.float64)
 
-    dist_op = DistributedAttentionKernelOperator(
-        e, lambda_reg=1e-2, dtype=torch.float64
-    )
+    dist_op = DistributedAttentionKernelOperator(e, lambda_reg=1e-2, dtype=torch.float64)
     assert dist_op.single_device
 
     y_dist = dist_op.matvec(x)
@@ -33,9 +31,7 @@ def test_distributed_matvec_matches_dense():
     e = torch.randn(n, 8, dtype=torch.float64)
     x = torch.randn(n, dtype=torch.float64)
 
-    dist_op = DistributedAttentionKernelOperator(
-        e, lambda_reg=1e-2, dtype=torch.float64
-    )
+    dist_op = DistributedAttentionKernelOperator(e, lambda_reg=1e-2, dtype=torch.float64)
     single_op = AttentionKernelOperator(e, lambda_reg=1e-2, dtype=torch.float64)
 
     y_dist = dist_op.matvec(x)
@@ -51,9 +47,7 @@ def test_distributed_diagonal_matches_dense():
     n = 50
     e = torch.randn(n, 8, dtype=torch.float64)
 
-    dist_op = DistributedAttentionKernelOperator(
-        e, lambda_reg=1e-2, dtype=torch.float64
-    )
+    dist_op = DistributedAttentionKernelOperator(e, lambda_reg=1e-2, dtype=torch.float64)
     single_op = AttentionKernelOperator(e, lambda_reg=1e-2, dtype=torch.float64)
 
     d_dist = dist_op.diagonal()
@@ -69,9 +63,7 @@ def test_distributed_to_dense_matches_dense():
     n = 30
     e = torch.randn(n, 8, dtype=torch.float64)
 
-    dist_op = DistributedAttentionKernelOperator(
-        e, lambda_reg=1e-2, dtype=torch.float64
-    )
+    dist_op = DistributedAttentionKernelOperator(e, lambda_reg=1e-2, dtype=torch.float64)
     single_op = AttentionKernelOperator(e, lambda_reg=1e-2, dtype=torch.float64)
 
     m_dist = dist_op.to_dense()
@@ -88,9 +80,7 @@ def test_distributed_kernel_eval():
     e = torch.randn(n, 8, dtype=torch.float64)
     x = torch.randn(10, 8, dtype=torch.float64)
 
-    dist_op = DistributedAttentionKernelOperator(
-        e, lambda_reg=1e-2, dtype=torch.float64
-    )
+    dist_op = DistributedAttentionKernelOperator(e, lambda_reg=1e-2, dtype=torch.float64)
     single_op = AttentionKernelOperator(e, lambda_reg=1e-2, dtype=torch.float64)
 
     k_dist = dist_op.kernel_eval(x)

@@ -20,9 +20,7 @@ class ModelPersistence:
     def save(regressor: "LAKERRegressor", path: str) -> None:
         """Serialize the fitted model to disk."""
         if regressor.alpha is None:
-            raise RuntimeError(
-                "Model has not been fitted. Call fit() before saving."
-            )
+            raise RuntimeError("Model has not been fitted. Call fit() before saving.")
         state: dict[str, Any] = {
             "embedding_dim": regressor.embedding_dim,
             "lambda_reg": regressor.lambda_reg,
@@ -44,36 +42,22 @@ class ModelPersistence:
             "device": str(regressor.device),
             "dtype": str(regressor.dtype),
             "embedding_dtype": (
-                str(regressor.embedding_dtype)
-                if regressor.embedding_dtype
-                else None
+                str(regressor.embedding_dtype) if regressor.embedding_dtype else None
             ),
             "verbose": regressor.verbose,
             "embeddings": regressor.embeddings,
             "alpha": regressor.alpha,
         }
         if regressor.embedding_model is not None:
-            state["embedding_model_state"] = (
-                regressor.embedding_model.state_dict()
-            )
-            state["embedding_model_class"] = (
-                regressor.embedding_model.__class__.__name__
-            )
-            state["embedding_model_module"] = (
-                regressor.embedding_model.__class__.__module__
-            )
+            state["embedding_model_state"] = regressor.embedding_model.state_dict()
+            state["embedding_model_class"] = regressor.embedding_model.__class__.__name__
+            state["embedding_model_module"] = regressor.embedding_model.__class__.__module__
             if hasattr(regressor.embedding_model, "input_dim"):
                 state["input_dim"] = regressor.embedding_model.input_dim
         if regressor.residual_corrector is not None:
-            state["residual_corrector_state"] = (
-                regressor.residual_corrector.state_dict()
-            )
-            state["residual_corrector_class"] = (
-                regressor.residual_corrector.__class__.__name__
-            )
-            state["residual_corrector_module"] = (
-                regressor.residual_corrector.__class__.__module__
-            )
+            state["residual_corrector_state"] = regressor.residual_corrector.state_dict()
+            state["residual_corrector_class"] = regressor.residual_corrector.__class__.__name__
+            state["residual_corrector_module"] = regressor.residual_corrector.__class__.__module__
         torch.save(state, path)
 
     @staticmethod
@@ -83,12 +67,10 @@ class ModelPersistence:
         dtype = torch.float32 if "float32" in state["dtype"] else torch.float64
         embedding_dtype = (
             torch.float32
-            if state.get("embedding_dtype")
-            and "float32" in state["embedding_dtype"]
+            if state.get("embedding_dtype") and "float32" in state["embedding_dtype"]
             else (
                 torch.float64
-                if state.get("embedding_dtype")
-                and "float64" in state["embedding_dtype"]
+                if state.get("embedding_dtype") and "float64" in state["embedding_dtype"]
                 else None
             )
         )
@@ -123,9 +105,7 @@ class ModelPersistence:
 
         if "embedding_model_state" in state:
             class_name = state["embedding_model_class"]
-            module_name = state.get(
-                "embedding_model_module", "laker.embeddings"
-            )
+            module_name = state.get("embedding_model_module", "laker.embeddings")
             try:
                 import importlib
 
@@ -162,20 +142,12 @@ class ModelPersistence:
                     )
                 except TypeError:
                     model.embedding_model = cls()
-                    model.embedding_model.to(
-                        device=model.device, dtype=embed_dtype
-                    )
-            model.embedding_model.load_state_dict(
-                state["embedding_model_state"]
-            )
+                    model.embedding_model.to(device=model.device, dtype=embed_dtype)
+            model.embedding_model.load_state_dict(state["embedding_model_state"])
 
         if "residual_corrector_state" in state:
-            corr_class_name = state.get(
-                "residual_corrector_class", "ResidualCorrector"
-            )
-            corr_module_name = state.get(
-                "residual_corrector_module", "laker.correctors"
-            )
+            corr_class_name = state.get("residual_corrector_class", "ResidualCorrector")
+            corr_module_name = state.get("residual_corrector_module", "laker.correctors")
             try:
                 import importlib
 
@@ -197,9 +169,7 @@ class ModelPersistence:
                     hidden_dim=32,
                     dropout=0.1,
                 ).to(model.device)
-                model.residual_corrector.load_state_dict(
-                    state["residual_corrector_state"]
-                )
+                model.residual_corrector.load_state_dict(state["residual_corrector_state"])
 
         from laker.kernels import (
             AttentionKernelOperator,

@@ -131,9 +131,7 @@ class AttentionKernelOperator:
     ) -> None:
         """Initialise the exact attention kernel operator."""
         if embeddings.dim() != 2:
-            raise ValueError(
-                f"embeddings must be 2-D, got shape {embeddings.shape}"
-            )
+            raise ValueError(f"embeddings must be 2-D, got shape {embeddings.shape}")
         self.n = embeddings.shape[0]
         self.embedding_dim = embeddings.shape[1]
         self.lambda_reg = float(lambda_reg)
@@ -219,32 +217,24 @@ class AttentionKernelOperator:
         if x.dim() == 1:
             for i_start in range(0, n, chunk_size_local):
                 i_end = min(i_start + chunk_size_local, n)
-                accum = torch.zeros(
-                    i_end - i_start, device=self.device, dtype=self.dtype
-                )
+                accum = torch.zeros(i_end - i_start, device=self.device, dtype=self.dtype)
                 e_i = self.embeddings[i_start:i_end]
                 for j_start in range(0, n, chunk_size_local):
                     j_end = min(j_start + chunk_size_local, n)
                     gram_block = e_i @ self.embeddings[j_start:j_end].T
-                    exp_safe(
-                        gram_block, out=gram_block, skip_clamp=self.skip_clamp
-                    )
+                    exp_safe(gram_block, out=gram_block, skip_clamp=self.skip_clamp)
                     accum.addmv_(gram_block, x[j_start:j_end])
                 out[i_start:i_end].add_(accum)
         else:
             k = x.shape[1]
             for i_start in range(0, n, chunk_size_local):
                 i_end = min(i_start + chunk_size_local, n)
-                accum = torch.zeros(
-                    i_end - i_start, k, device=self.device, dtype=self.dtype
-                )
+                accum = torch.zeros(i_end - i_start, k, device=self.device, dtype=self.dtype)
                 e_i = self.embeddings[i_start:i_end]
                 for j_start in range(0, n, chunk_size_local):
                     j_end = min(j_start + chunk_size_local, n)
                     gram_block = e_i @ self.embeddings[j_start:j_end].T
-                    exp_safe(
-                        gram_block, out=gram_block, skip_clamp=self.skip_clamp
-                    )
+                    exp_safe(gram_block, out=gram_block, skip_clamp=self.skip_clamp)
                     accum.addmm_(gram_block, x[j_start:j_end])
                 out[i_start:i_end].add_(accum)
         return out
@@ -378,9 +368,7 @@ class NystromAttentionKernelOperator:
     ) -> None:
         """Initialise the Nyström kernel operator."""
         if embeddings.dim() != 2:
-            raise ValueError(
-                f"embeddings must be 2-D, got shape {embeddings.shape}"
-            )
+            raise ValueError(f"embeddings must be 2-D, got shape {embeddings.shape}")
         self.n = embeddings.shape[0]
         self.embedding_dim = embeddings.shape[1]
         self.lambda_reg = float(lambda_reg)
@@ -397,11 +385,7 @@ class NystromAttentionKernelOperator:
         self.dtype = dtype
         self.embeddings = embeddings.to(device=device, dtype=dtype)
 
-        m = (
-            num_landmarks
-            if num_landmarks is not None
-            else max(50, int(self.n**0.5))
-        )
+        m = num_landmarks if num_landmarks is not None else max(50, int(self.n**0.5))
         self.m = min(m, self.n)
 
         # Landmark norms bounded by training embedding norms — skip clamp.
@@ -411,25 +395,17 @@ class NystromAttentionKernelOperator:
         self.landmark_embeddings = self.embeddings[self.landmark_indices]
 
         # Compute K_nm (n, m) and K_mm (m, m)
-        self.k_nm = self.compute_kernel_matrix(
-            self.embeddings, self.landmark_embeddings
-        )
-        self.k_mm = self.compute_kernel_matrix(
-            self.landmark_embeddings, self.landmark_embeddings
-        )
+        self.k_nm = self.compute_kernel_matrix(self.embeddings, self.landmark_embeddings)
+        self.k_mm = self.compute_kernel_matrix(self.landmark_embeddings, self.landmark_embeddings)
 
         # Regularised Cholesky of K_mm for stable solves
-        k_mm_reg = self.k_mm + 1e-6 * torch.eye(
-            self.m, device=device, dtype=dtype
-        )
+        k_mm_reg = self.k_mm + 1e-6 * torch.eye(self.m, device=device, dtype=dtype)
         self.k_mm_chol = torch.linalg.cholesky(k_mm_reg)
 
         # Precompute K_nm @ K_mm^{-1} for fast matvecs via Cholesky solve
         self.k_nm_kmm_inv = torch.linalg.solve_triangular(
             self.k_mm_chol.T,
-            torch.linalg.solve_triangular(
-                self.k_mm_chol, self.k_nm.T, upper=False
-            ),
+            torch.linalg.solve_triangular(self.k_mm_chol, self.k_nm.T, upper=False),
             upper=True,
         ).T  # (n, m)
 
@@ -484,9 +460,7 @@ class NystromAttentionKernelOperator:
         sampled = torch.multinomial(probs, self.m, replacement=False)
         return pilot_idx[sampled]
 
-    def compute_kernel_matrix(
-        self, x: torch.Tensor, y: torch.Tensor
-    ) -> torch.Tensor:
+    def compute_kernel_matrix(self, x: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
         """Compute exponential attention kernel matrix."""
         gram = x @ y.T
         return exp_safe(gram, skip_clamp=self.skip_clamp)
@@ -558,9 +532,7 @@ class RandomFeatureAttentionKernelOperator:
     ) -> None:
         """Initialise the random-feature kernel operator."""
         if embeddings.dim() != 2:
-            raise ValueError(
-                f"embeddings must be 2-D, got shape {embeddings.shape}"
-            )
+            raise ValueError(f"embeddings must be 2-D, got shape {embeddings.shape}")
         self.n = embeddings.shape[0]
         self.embedding_dim = embeddings.shape[1]
         self.lambda_reg = float(lambda_reg)
@@ -575,32 +547,19 @@ class RandomFeatureAttentionKernelOperator:
         self.dtype = dtype
         self.embeddings = embeddings.to(device=device, dtype=dtype)
 
-        r = (
-            num_features
-            if num_features is not None
-            else max(100, int(self.n**0.5 * 2))
-        )
+        r = num_features if num_features is not None else max(100, int(self.n**0.5 * 2))
         self.num_features = r
 
         # Generate random Fourier frequencies
         gen = torch.Generator(device=device).manual_seed(42)
         self.freq = (
-            torch.randn(
-                self.embedding_dim, r, generator=gen, device=device, dtype=dtype
-            )
-            / sigma
+            torch.randn(self.embedding_dim, r, generator=gen, device=device, dtype=dtype) / sigma
         )
-        self.phase = (
-            torch.rand(r, generator=gen, device=device, dtype=dtype)
-            * 2.0
-            * math.pi
-        )
+        self.phase = torch.rand(r, generator=gen, device=device, dtype=dtype) * 2.0 * math.pi
 
         # Compute feature map Phi: (n, 2*r) [cos, sin]
         proj = self.embeddings @ self.freq
-        phi = torch.cat(
-            [torch.cos(proj + self.phase), torch.sin(proj + self.phase)], dim=1
-        )
+        phi = torch.cat([torch.cos(proj + self.phase), torch.sin(proj + self.phase)], dim=1)
         # Normalise so that Phi @ Phi.T approximates the kernel
         self.phi = phi / (r**0.5)
 
@@ -688,9 +647,7 @@ class SparseKNNAttentionKernelOperator:
     ) -> None:
         """Initialise the sparse k-NN kernel operator."""
         if embeddings.dim() != 2:
-            raise ValueError(
-                f"embeddings must be 2-D, got shape {embeddings.shape}"
-            )
+            raise ValueError(f"embeddings must be 2-D, got shape {embeddings.shape}")
         self.n = embeddings.shape[0]
         self.embedding_dim = embeddings.shape[1]
         self.lambda_reg = float(lambda_reg)
@@ -738,16 +695,13 @@ class SparseKNNAttentionKernelOperator:
             # k-1 nearest neighbours + self (distance 0)
             topk = torch.topk(dists, min(k, n), largest=False, dim=1)
             row_idx = (
-                torch.arange(i_start, i_end, device=self.device)
-                .unsqueeze(1)
-                .expand(-1, min(k, n))
+                torch.arange(i_start, i_end, device=self.device).unsqueeze(1).expand(-1, min(k, n))
             )
             row_list.append(row_idx.flatten())
             col_list.append(topk.indices.flatten())
             # Compute exact kernel values for the selected pairs
             gram_vals = torch.sum(
-                self.embeddings[i_start:i_end].unsqueeze(1)
-                * self.embeddings[topk.indices],
+                self.embeddings[i_start:i_end].unsqueeze(1) * self.embeddings[topk.indices],
                 dim=2,
             ).flatten()
             val_list.append(exp_safe(gram_vals))
@@ -768,16 +722,10 @@ class SparseKNNAttentionKernelOperator:
         sorted_cols = all_cols[order]
         sorted_vals = all_vals[order]
 
-        diff = torch.diff(
-            sorted_rows.to(torch.int64) * (n + 1) + sorted_cols.to(torch.int64)
-        )
-        is_new = torch.cat(
-            [torch.tensor([True], device=self.device), diff != 0]
-        )
+        diff = torch.diff(sorted_rows.to(torch.int64) * (n + 1) + sorted_cols.to(torch.int64))
+        is_new = torch.cat([torch.tensor([True], device=self.device), diff != 0])
 
-        coo_indices = torch.stack(
-            [sorted_rows[is_new], sorted_cols[is_new]], dim=0
-        )
+        coo_indices = torch.stack([sorted_rows[is_new], sorted_cols[is_new]], dim=0)
         coo_values = sorted_vals[is_new]
 
         # Ensure every row has a diagonal entry and enforce strict diagonal
@@ -795,9 +743,7 @@ class SparseKNNAttentionKernelOperator:
             row_sums = torch.zeros(n, device=self.device, dtype=self.dtype)
             row_sums.index_add_(0, off_rows, off_vals.abs())
 
-            diag_map = torch.full(
-                (n,), float("-inf"), device=self.device, dtype=self.dtype
-            )
+            diag_map = torch.full((n,), float("-inf"), device=self.device, dtype=self.dtype)
             diag_map[diag_rows] = diag_vals
 
             min_diag = row_sums * 1.01 + 1e-8
@@ -834,9 +780,7 @@ class SparseKNNAttentionKernelOperator:
         """Apply ``(lambda I + G_approx)`` to vector(s)."""
         out = self.lambda_reg * x
         if x.dim() == 1:
-            out = out + torch.sparse.mm(
-                self.cached_sparse_mat, x.unsqueeze(1)
-            ).squeeze(1)
+            out = out + torch.sparse.mm(self.cached_sparse_mat, x.unsqueeze(1)).squeeze(1)
         else:
             out = out + torch.sparse.mm(self.cached_sparse_mat, x)
         return out
@@ -887,11 +831,7 @@ class SparseKNNAttentionKernelOperator:
             i_end = min(i_start + chunk_size_local, m)
             gram_chunk = x[i_start:i_end] @ y.T  # (chunk_size_local, p)
             topk = torch.topk(gram_chunk, k, largest=True, dim=1)
-            row_idx = (
-                torch.arange(i_start, i_end, device=self.device)
-                .unsqueeze(1)
-                .expand(-1, k)
-            )
+            row_idx = torch.arange(i_start, i_end, device=self.device).unsqueeze(1).expand(-1, k)
             row_list.append(row_idx.flatten())
             col_list.append(topk.indices.flatten())
             val_list.append(exp_safe(topk.values).flatten())
@@ -959,9 +899,7 @@ def multilinear_weights(
 
     # Build all 2^d vertex combinations
     vertex_offsets = torch.arange(vertices, device=x.device)
-    bits = (
-        (vertex_offsets.unsqueeze(1) >> torch.arange(d, device=x.device)) & 1
-    ).to(torch.bool)
+    bits = ((vertex_offsets.unsqueeze(1) >> torch.arange(d, device=x.device)) & 1).to(torch.bool)
 
     # Grid strides for linear index
     strides = [1]
@@ -973,9 +911,7 @@ def multilinear_weights(
     indices = torch.zeros(n, vertices, dtype=torch.long, device=x.device)
     weights = torch.ones(n, vertices, dtype=x.dtype, device=x.device)
     for dim in range(d):
-        dim_idx = (
-            low_idx[:, dim].unsqueeze(1) + bits[:, dim].unsqueeze(0).long()
-        )  # (n, vertices)
+        dim_idx = low_idx[:, dim].unsqueeze(1) + bits[:, dim].unsqueeze(0).long()  # (n, vertices)
         indices += dim_idx * strides_t[dim]
         dim_weight = torch.where(
             bits[:, dim].unsqueeze(0),
@@ -1020,9 +956,7 @@ class SKIAttentionKernelOperator:
     ) -> None:
         """Initialise the SKI kernel operator."""
         if embeddings.dim() != 2:
-            raise ValueError(
-                f"embeddings must be 2-D, got shape {embeddings.shape}"
-            )
+            raise ValueError(f"embeddings must be 2-D, got shape {embeddings.shape}")
         self.n = embeddings.shape[0]
         self.embedding_dim = embeddings.shape[1]
         self.lambda_reg = float(lambda_reg)
@@ -1046,10 +980,7 @@ class SKIAttentionKernelOperator:
 
         # Determine points per dimension for product grid
         grid_points_per_dimension = max(2, int(grid_size ** (1.0 / d)))
-        while (
-            grid_points_per_dimension**d > grid_size
-            and grid_points_per_dimension > 2
-        ):
+        while grid_points_per_dimension**d > grid_size and grid_points_per_dimension > 2:
             grid_points_per_dimension -= 1
         self.grid_points_per_dim = grid_points_per_dimension
         actual_grid = grid_points_per_dimension**d
@@ -1188,16 +1119,12 @@ class SKIAttentionKernelOperator:
         w_dense = torch.zeros(n, g, device=self.device, dtype=self.dtype)
         vertices = self.interp_indices.shape[1]
         for v in range(vertices):
-            w_dense[
-                torch.arange(n), self.interp_indices[:, v]
-            ] += self.interp_weights[:, v]
+            w_dense[torch.arange(n), self.interp_indices[:, v]] += self.interp_weights[:, v]
         k_approx = w_dense @ self.k_grid @ w_dense.T
         k_approx.diagonal().add_(self.lambda_reg)
         return k_approx
 
-    def build_interp_matrix(
-        self, points: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    def build_interp_matrix(self, points: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         """Return interpolation indices and weights for arbitrary points."""
         d = self.embedding_dim
         grid_points_per_dimension = self.grid_points_per_dim
@@ -1287,9 +1214,7 @@ class TwoScaleAttentionKernelOperator:
     ) -> None:
         """Initialise the spectrum shaper."""
         if embeddings.dim() != 2:
-            raise ValueError(
-                f"embeddings must be 2-D, got shape {embeddings.shape}"
-            )
+            raise ValueError(f"embeddings must be 2-D, got shape {embeddings.shape}")
         self.n = embeddings.shape[0]
         self.embedding_dim = embeddings.shape[1]
         self.lambda_reg = float(lambda_reg)
@@ -1325,22 +1250,18 @@ class TwoScaleAttentionKernelOperator:
 
     def matvec(self, x: torch.Tensor) -> torch.Tensor:
         """Apply ``(lambda I + G_twoscale)`` to vector(s) ``x``."""
-        return self.alpha * self.global_op.matvec(x) + (
-            1.0 - self.alpha
-        ) * self.local_op.matvec(x)
+        return self.alpha * self.global_op.matvec(x) + (1.0 - self.alpha) * self.local_op.matvec(x)
 
     def diagonal(self) -> torch.Tensor:
         """Return diagonal of ``lambda I + G_twoscale``."""
         return (
-            self.alpha * self.global_op.diagonal()
-            + (1.0 - self.alpha) * self.local_op.diagonal()
+            self.alpha * self.global_op.diagonal() + (1.0 - self.alpha) * self.local_op.diagonal()
         )
 
     def to_dense(self) -> torch.Tensor:
         """Materialise full dense matrix (for debugging only)."""
         return (
-            self.alpha * self.global_op.to_dense()
-            + (1.0 - self.alpha) * self.local_op.to_dense()
+            self.alpha * self.global_op.to_dense() + (1.0 - self.alpha) * self.local_op.to_dense()
         )
 
     def kernel_eval(
@@ -1350,11 +1271,9 @@ class TwoScaleAttentionKernelOperator:
         chunk_size: Optional[int] = None,
     ) -> torch.Tensor:
         """Evaluate two-scale kernel between queries and training points."""
-        return self.alpha * self.global_op.kernel_eval(
-            x, y, chunk_size=chunk_size
-        ) + (1.0 - self.alpha) * self.local_op.kernel_eval(
-            x, y, chunk_size=chunk_size
-        )
+        return self.alpha * self.global_op.kernel_eval(x, y, chunk_size=chunk_size) + (
+            1.0 - self.alpha
+        ) * self.local_op.kernel_eval(x, y, chunk_size=chunk_size)
 
 
 # ---------------------------------------------------------------------------
@@ -1391,9 +1310,7 @@ class MonotoneSpectrumShaper(nn.Module):
         dtype: Optional[torch.dtype] = None,
     ) -> None:
         """Place fixed knots linearly across the eigenvalue range."""
-        self.knots = torch.linspace(
-            min_val, max_val, self.num_knots, device=device, dtype=dtype
-        )
+        self.knots = torch.linspace(min_val, max_val, self.num_knots, device=device, dtype=dtype)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Apply the learned monotone function to ``x``."""
@@ -1403,9 +1320,7 @@ class MonotoneSpectrumShaper(nn.Module):
         weights = torch.nn.functional.softplus(self.raw_weights)
         # x: (,) or (n,) -> out: same shape
         diffs = x.unsqueeze(-1) - self.knots  # (..., num_knots)
-        out = slope * x + (weights * torch.nn.functional.softplus(diffs)).sum(
-            dim=-1
-        )
+        out = slope * x + (weights * torch.nn.functional.softplus(diffs)).sum(dim=-1)
         return out
 
 
@@ -1448,9 +1363,7 @@ class SpectralAttentionKernelOperator:
     ) -> None:
         """Initialise the spectral-shaped kernel operator."""
         if embeddings.dim() != 2:
-            raise ValueError(
-                f"embeddings must be 2-D, got shape {embeddings.shape}"
-            )
+            raise ValueError(f"embeddings must be 2-D, got shape {embeddings.shape}")
         self.n = embeddings.shape[0]
         self.embedding_dim = embeddings.shape[1]
         self.lambda_reg = float(lambda_reg)
@@ -1477,9 +1390,7 @@ class SpectralAttentionKernelOperator:
         max_val = float(sigma_sq.max().item())
         # Add a little padding so knots cover the range comfortably
         pad = max(1e-6, (max_val - min_val) * 0.1)
-        self.shaper.set_knots(
-            min_val - pad, max_val + pad, device=device, dtype=dtype
-        )
+        self.shaper.set_knots(min_val - pad, max_val + pad, device=device, dtype=dtype)
         self.shaper = self.shaper.to(device=device, dtype=dtype)
 
         with torch.no_grad():
@@ -1487,9 +1398,7 @@ class SpectralAttentionKernelOperator:
             max_exp = 80.0 if dtype == torch.float32 else 700.0
             self.spectrum = torch.exp(shaped.clamp(max=max_exp))  # (d,)
 
-        self.sigma_inv = torch.where(
-            s > 1e-12, s.reciprocal(), torch.zeros_like(s)
-        )
+        self.sigma_inv = torch.where(s > 1e-12, s.reciprocal(), torch.zeros_like(s))
 
     def matvec(self, x: torch.Tensor) -> torch.Tensor:
         """Apply ``(lambda I + K)`` to vector(s) ``x``."""

@@ -100,9 +100,7 @@ class LAKERCore:
             dtype = get_default_dtype()
         self.device = device
         self.dtype = dtype
-        self.embedding_dtype = (
-            embedding_dtype if embedding_dtype is not None else dtype
-        )
+        self.embedding_dtype = embedding_dtype if embedding_dtype is not None else dtype
 
     # ------------------------------------------------------------------
     # Embeddings
@@ -161,16 +159,12 @@ class LAKERCore:
     ) -> KernelOperator:
         """Construct the kernel operator for given embeddings."""
         n = embeddings.shape[0]
-        lambda_value = (
-            float(lambda_reg) if lambda_reg is not None else self.lambda_reg
-        )
+        lambda_value = float(lambda_reg) if lambda_reg is not None else self.lambda_reg
         chunk_size_local = chunk_size
         if chunk_size_local is None and n > 5000:
             chunk_size_local = max(1024, min(n // 10, 8192))
             if self.verbose:
-                logger.info(
-                    "Auto-selected chunk_size=%d for n=%d", chunk_size_local, n
-                )
+                logger.info("Auto-selected chunk_size=%d for n=%d", chunk_size_local, n)
 
         operator: KernelOperator
         if self.distributed and self.kernel_approx is None:
@@ -183,11 +177,7 @@ class LAKERCore:
             if self.verbose:
                 logger.info(
                     "Using distributed kernel on %d device(s)",
-                    len(
-                        cast(
-                            DistributedAttentionKernelOperator, operator
-                        ).devices
-                    ),
+                    len(cast(DistributedAttentionKernelOperator, operator).devices),
                 )
         elif self.kernel_approx is None:
             operator = AttentionKernelOperator(
@@ -225,9 +215,7 @@ class LAKERCore:
             if self.verbose:
                 logger.info(
                     "Using RFF approximation with r=%d features",
-                    cast(
-                        RandomFeatureAttentionKernelOperator, operator
-                    ).num_features,
+                    cast(RandomFeatureAttentionKernelOperator, operator).num_features,
                 )
         elif self.kernel_approx == "knn":
             operator = SparseKNNAttentionKernelOperator(
@@ -241,9 +229,7 @@ class LAKERCore:
             if self.verbose:
                 logger.info(
                     "Using sparse k-NN approximation with k=%d neighbours",
-                    cast(
-                        SparseKNNAttentionKernelOperator, operator
-                    ).k_neighbors,
+                    cast(SparseKNNAttentionKernelOperator, operator).k_neighbors,
                 )
         elif self.kernel_approx == "ski":
             operator = SKIAttentionKernelOperator(
@@ -256,9 +242,7 @@ class LAKERCore:
             if self.verbose:
                 logger.info(
                     "Using SKI approximation with %d grid points",
-                    cast(
-                        SKIAttentionKernelOperator, operator
-                    ).grid_points.shape[0],
+                    cast(SKIAttentionKernelOperator, operator).grid_points.shape[0],
                 )
         elif self.kernel_approx == "twoscale":
             operator = TwoScaleAttentionKernelOperator(
@@ -287,9 +271,7 @@ class LAKERCore:
             if self.verbose:
                 logger.info(
                     "Using spectral-shaped kernel with %d knots",
-                    cast(
-                        SpectralAttentionKernelOperator, operator
-                    ).shaper.num_knots,
+                    cast(SpectralAttentionKernelOperator, operator).shaper.num_knots,
                 )
         else:
             raise ValueError(f"Unknown kernel_approx={self.kernel_approx}")
@@ -313,9 +295,7 @@ class LAKERCore:
 
             preconditioner = AdaptivePreconditioner(
                 gamma=gamma if gamma is not None else self.gamma,
-                num_probes=(
-                    num_probes if num_probes is not None else self.num_probes
-                ),
+                num_probes=(num_probes if num_probes is not None else self.num_probes),
                 epsilon=self.epsilon,
                 base_rho=self.base_rho,
                 max_iter=self.cccp_max_iter,
@@ -328,9 +308,7 @@ class LAKERCore:
             return preconditioner
 
         preconditioner = CCCPPreconditioner(
-            num_probes=(
-                num_probes if num_probes is not None else self.num_probes
-            ),
+            num_probes=(num_probes if num_probes is not None else self.num_probes),
             gamma=gamma if gamma is not None else self.gamma,
             epsilon=self.epsilon,
             base_rho=self.base_rho,
@@ -404,9 +382,7 @@ class LAKERCore:
 
             element_size = 4 if self.dtype == torch.float32 else 8
             mem_per_chunk = (
-                (chunk_size or m) * n * element_size
-                if chunk_size
-                else m * n * element_size
+                (chunk_size or m) * n * element_size if chunk_size else m * n * element_size
             )
             if chunk_size is None or mem_per_chunk <= 64 * 1024 * 1024:
                 k_query = kernel_operator.kernel_eval(
@@ -423,9 +399,7 @@ class LAKERCore:
                 chunk_size_local = chunk_size
                 for i_start in range(0, m, chunk_size_local):
                     i_end = min(i_start + chunk_size_local, m)
-                    accum = torch.zeros(
-                        i_end - i_start, device=self.device, dtype=self.dtype
-                    )
+                    accum = torch.zeros(i_end - i_start, device=self.device, dtype=self.dtype)
                     e_i = query_embeddings[i_start:i_end]
                     for j_start in range(0, n, chunk_size_local):
                         j_end = min(j_start + chunk_size_local, n)
@@ -470,9 +444,7 @@ class LAKERCore:
                     dim=1,
                 ) / (ko.num_features**0.5)
                 a = ko.phi.T @ ko.phi
-                a_reg = a + lambda_reg * torch.eye(
-                    a.shape[0], device=self.device, dtype=self.dtype
-                )
+                a_reg = a + lambda_reg * torch.eye(a.shape[0], device=self.device, dtype=self.dtype)
                 chol = torch.linalg.cholesky(a_reg)
                 m_solve = torch.cholesky_solve(
                     torch.eye(a.shape[0], device=self.device, dtype=self.dtype),
@@ -496,9 +468,7 @@ class LAKERCore:
             )
 
             if chunk_size is None or m <= chunk_size:
-                k_train_query = kernel_operator.kernel_eval(
-                    embeddings, query_embeddings
-                )
+                k_train_query = kernel_operator.kernel_eval(embeddings, query_embeddings)
                 if k_train_query.is_sparse:
                     k_train_query = k_train_query.to_dense()
                 v = pcg.solve(
@@ -506,9 +476,7 @@ class LAKERCore:
                     preconditioner=preconditioner.apply,
                     rhs=k_train_query,
                 )
-                k_diag_mat = kernel_operator.kernel_eval(
-                    query_embeddings, query_embeddings
-                )
+                k_diag_mat = kernel_operator.kernel_eval(query_embeddings, query_embeddings)
                 if k_diag_mat.is_sparse:
                     k_diag_mat = k_diag_mat.to_dense()
                 k_diag = k_diag_mat.diagonal()
@@ -517,9 +485,7 @@ class LAKERCore:
                 for start in range(0, m, chunk_size):
                     end = min(start + chunk_size, m)
                     q_chunk = query_embeddings[start:end]
-                    k_train_chunk = kernel_operator.kernel_eval(
-                        embeddings, q_chunk
-                    )
+                    k_train_chunk = kernel_operator.kernel_eval(embeddings, q_chunk)
                     if k_train_chunk.is_sparse:
                         k_train_chunk = k_train_chunk.to_dense()
                     v_chunk = pcg.solve(
@@ -531,9 +497,7 @@ class LAKERCore:
                     if k_diag_mat.is_sparse:
                         k_diag_mat = k_diag_mat.to_dense()
                     k_diag_chunk = k_diag_mat.diagonal()
-                    var[start:end] = k_diag_chunk - torch.sum(
-                        k_train_chunk * v_chunk, dim=0
-                    )
+                    var[start:end] = k_diag_chunk - torch.sum(k_train_chunk * v_chunk, dim=0)
 
             return var.clamp(min=0.0)
 
@@ -562,11 +526,7 @@ class LAKERCore:
             chunk_size = max(1024, min(max(m, n) // 10, 8192))
 
         element_size = 4 if self.dtype == torch.float32 else 8
-        mem_per_chunk = (
-            (chunk_size or m) * n * element_size
-            if chunk_size
-            else m * n * element_size
-        )
+        mem_per_chunk = (chunk_size or m) * n * element_size if chunk_size else m * n * element_size
         if chunk_size is None or mem_per_chunk <= 64 * 1024 * 1024:
             k_query = kernel_operator.kernel_eval(
                 query_embeddings, embeddings, chunk_size=chunk_size
@@ -582,9 +542,7 @@ class LAKERCore:
             chunk_size_local = chunk_size
             for i_start in range(0, m, chunk_size_local):
                 i_end = min(i_start + chunk_size_local, m)
-                accum = torch.zeros(
-                    i_end - i_start, device=self.device, dtype=self.dtype
-                )
+                accum = torch.zeros(i_end - i_start, device=self.device, dtype=self.dtype)
                 e_i = query_embeddings[i_start:i_end]
                 for j_start in range(0, n, chunk_size_local):
                     j_end = min(j_start + chunk_size_local, n)
@@ -624,13 +582,11 @@ class LAKERCore:
         if self.kernel_approx == "rff" and hasattr(kernel_operator, "phi"):
             ko = cast(RandomFeatureAttentionKernelOperator, kernel_operator)
             proj = query_embeddings @ ko.freq
-            phi_q = torch.cat(
-                [torch.cos(proj + ko.phase), torch.sin(proj + ko.phase)], dim=1
-            ) / (ko.num_features**0.5)
-            a = ko.phi.T @ ko.phi
-            a_reg = a + lambda_reg * torch.eye(
-                a.shape[0], device=self.device, dtype=self.dtype
+            phi_q = torch.cat([torch.cos(proj + ko.phase), torch.sin(proj + ko.phase)], dim=1) / (
+                ko.num_features**0.5
             )
+            a = ko.phi.T @ ko.phi
+            a_reg = a + lambda_reg * torch.eye(a.shape[0], device=self.device, dtype=self.dtype)
             chol = torch.linalg.cholesky(a_reg)
             m_solve = torch.cholesky_solve(
                 torch.eye(a.shape[0], device=self.device, dtype=self.dtype),
@@ -670,9 +626,7 @@ class LAKERCore:
 
         v = torch.randn(n, device=self.device, dtype=self.dtype)
         v = v / torch.linalg.norm(v)
-        pcg = PreconditionedConjugateGradient(
-            tol=1e-6, max_iter=50, verbose=False
-        )
+        pcg = PreconditionedConjugateGradient(tol=1e-6, max_iter=50, verbose=False)
         for _ in range(5):
             v = pcg.solve(
                 operator=preconditioned_operator,

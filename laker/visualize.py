@@ -122,11 +122,7 @@ class Visualizer:
         figsize = figsize if figsize is not None else self.figsize
         fig, ax = plt.subplots(figsize=figsize)
         for idx, gaps in enumerate(objective_gaps):
-            label = (
-                labels[idx]
-                if labels and idx < len(labels)
-                else f"Solver {idx + 1}"
-            )
+            label = labels[idx] if labels and idx < len(labels) else f"Solver {idx + 1}"
             ax.semilogy(gaps, label=label)
         ax.set_xlabel(xlabel)
         ax.set_ylabel(ylabel)
@@ -134,9 +130,7 @@ class Visualizer:
         ax.legend()
         ax.grid(True, which="both", ls="--", alpha=0.5)
         fig.tight_layout()
-        logger.info(
-            "Plotted convergence curves: %d series", len(objective_gaps)
-        )
+        logger.info("Plotted convergence curves: %d series", len(objective_gaps))
         return fig, ax
 
 
@@ -222,6 +216,4 @@ def plot_convergence(
 
     """
     visualizer = Visualizer(figsize=figsize)
-    return visualizer.plot_convergence(
-        objective_gaps, labels, title, xlabel, ylabel, figsize
-    )
+    return visualizer.plot_convergence(objective_gaps, labels, title, xlabel, ylabel, figsize)

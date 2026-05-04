@@ -41,9 +41,7 @@ class EmbeddingTrainer:
         if y.dim() != 1:
             raise ValueError(f"y must be 1-D, got shape {y.shape}")
 
-        if regressor.embedding_module is None and not hasattr(
-            regressor, "embedding_model"
-        ):
+        if regressor.embedding_module is None and not hasattr(regressor, "embedding_model"):
             raise RuntimeError(
                 "fit_learned_embeddings requires an embedding model. "
                 "Call fit() first or pass embedding_module to __init__."
@@ -59,9 +57,7 @@ class EmbeddingTrainer:
                 p.requires_grad = True
             trainable = list(model.parameters())
             if not trainable:
-                raise RuntimeError(
-                    "Embedding model has no trainable parameters."
-                )
+                raise RuntimeError("Embedding model has no trainable parameters.")
 
         optimizer = torch.optim.Adam(trainable, lr=lr)
         best_loss = float("inf")
@@ -77,20 +73,13 @@ class EmbeddingTrainer:
 
             kernel_op = self.core.build_kernel_operator(embeddings)
 
-            if (
-                epoch % rebuild_freq == 0
-                or getattr(regressor, "alpha", None) is None
-            ):
+            if epoch % rebuild_freq == 0 or getattr(regressor, "alpha", None) is None:
                 with torch.no_grad():
-                    kernel_op_detached = self.core.build_kernel_operator(
-                        embeddings.detach()
-                    )
+                    kernel_op_detached = self.core.build_kernel_operator(embeddings.detach())
                     precond = self.core.build_preconditioner(
                         kernel_op_detached.matvec, embeddings.shape[0]
                     )
-                    alpha = self.core.solve_pcg(kernel_op_detached, precond, y)[
-                        0
-                    ]
+                    alpha = self.core.solve_pcg(kernel_op_detached, precond, y)[0]
                 regressor.preconditioner = precond
             else:
                 alpha = regressor.alpha.detach()
@@ -180,9 +169,7 @@ class EmbeddingTrainer:
                 dropout=0.1,
             ).to(self.core.device)
         else:
-            regressor.residual_corrector = regressor.residual_corrector.to(
-                self.core.device
-            )
+            regressor.residual_corrector = regressor.residual_corrector.to(self.core.device)
 
         optimizer = torch.optim.Adam(
             regressor.residual_corrector.parameters(),
@@ -210,8 +197,7 @@ class EmbeddingTrainer:
                 best_val_loss = val_loss
                 patience_counter = 0
                 best_state = {
-                    k: v.cpu().clone()
-                    for k, v in regressor.residual_corrector.state_dict().items()
+                    k: v.cpu().clone() for k, v in regressor.residual_corrector.state_dict().items()
                 }
             else:
                 patience_counter += 1
@@ -295,9 +281,7 @@ class EmbeddingTrainer:
                 p.requires_grad = True
             trainable = list(model.parameters())
             if not trainable:
-                raise RuntimeError(
-                    "Embedding model has no trainable parameters."
-                )
+                raise RuntimeError("Embedding model has no trainable parameters.")
 
         optimizer = torch.optim.Adam(trainable, lr=lr)
         n = x.shape[0]
@@ -316,9 +300,7 @@ class EmbeddingTrainer:
 
             kernel_op = self.core.build_kernel_operator(embeddings)
             with torch.no_grad():
-                kernel_op_detached = self.core.build_kernel_operator(
-                    embeddings.detach()
-                )
+                kernel_op_detached = self.core.build_kernel_operator(embeddings.detach())
                 precond = self.core.build_preconditioner(
                     kernel_op_detached.matvec,
                     n,
@@ -351,9 +333,7 @@ class EmbeddingTrainer:
             )
 
             residual = y[subset_idx] - mu[subset_idx]
-            nll = 0.5 * torch.mean(
-                torch.log(2.0 * math.pi * var) + (residual**2) / var
-            )
+            nll = 0.5 * torch.mean(torch.log(2.0 * math.pi * var) + (residual**2) / var)
             calibration = (torch.mean(residual**2) - torch.mean(var)) ** 2
             loss = nll + beta * calibration
 
@@ -387,9 +367,7 @@ class EmbeddingTrainer:
 
         # Final fit with converged embeddings on full data
         regressor.embeddings = embeddings.detach()
-        regressor.kernel_operator = self.core.build_kernel_operator(
-            regressor.embeddings
-        )
+        regressor.kernel_operator = self.core.build_kernel_operator(regressor.embeddings)
         regressor.preconditioner = self.core.build_preconditioner(
             regressor.kernel_operator.matvec,
             n,
