@@ -2,12 +2,12 @@
 
 import torch
 
+from laker.implicit_diff import hypergradient
 from laker.kernels import (
     AttentionKernelOperator,
     NystromAttentionKernelOperator,
     TwoScaleAttentionKernelOperator,
 )
-from laker.implicit_diff import hypergradient
 from laker.models import LAKERRegressor
 
 
