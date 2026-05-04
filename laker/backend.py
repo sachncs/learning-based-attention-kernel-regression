@@ -17,7 +17,7 @@ _ENV_INIT_DONE = False
 
 def _init_from_env() -> None:
     """Apply LAKER_DEVICE / LAKER_DTYPE environment variables once."""
-    global _ENV_INIT_DONE, DEFAULT_DEVICE, DEFAULT_DTYPE
+    global _ENV_INIT_DONE
     if _ENV_INIT_DONE:
         return
     _ENV_INIT_DONE = True

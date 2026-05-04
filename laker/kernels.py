@@ -1,6 +1,7 @@
 """Attention kernel operators for matrix-free linear algebra.
 
-Includes exact, low-rank (Nyström, RFF), sparse k-NN, SKI, spectral-shaped, and two-scale approximations.
+Includes exact, low-rank (Nyström, RFF), sparse k-NN, SKI, spectral-shaped,
+and two-scale approximations.
 """
 
 import logging

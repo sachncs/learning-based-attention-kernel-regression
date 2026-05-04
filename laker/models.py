@@ -127,8 +127,8 @@ class LAKERRegressor:
             "spectral",
         ):
             raise ValueError(
-                "kernel_approx must be None, 'nystrom', 'rff', 'knn', 'ski', 'twoscale', or 'spectral',"
-                f"got {kernel_approx}"
+                "kernel_approx must be None, 'nystrom', 'rff', 'knn', 'ski', "
+                f"'twoscale', or 'spectral', got {kernel_approx}"
             )
         if k_neighbors is not None and k_neighbors <= 0:
             raise ValueError(f"k_neighbors must be positive, got {k_neighbors}")
