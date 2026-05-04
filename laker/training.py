@@ -115,8 +115,10 @@ class EmbeddingTrainer:
 
         regressor.embeddings = embeddings.detach()
         regressor.kernel_operator = kernel_op
+        precond = regressor.preconditioner
+        assert precond is not None
         regressor.alpha, regressor.pcg_iterations_ = self.core.solve_pcg(
-            regressor.kernel_operator, regressor.preconditioner, y
+            kernel_op, precond, y
         )
         return regressor
 
@@ -367,13 +369,15 @@ class EmbeddingTrainer:
 
         # Final fit with converged embeddings on full data
         regressor.embeddings = embeddings.detach()
-        regressor.kernel_operator = self.core.build_kernel_operator(regressor.embeddings)
-        regressor.preconditioner = self.core.build_preconditioner(
-            regressor.kernel_operator.matvec,
+        kernel_operator = self.core.build_kernel_operator(regressor.embeddings)
+        regressor.kernel_operator = kernel_operator
+        preconditioner = self.core.build_preconditioner(
+            kernel_operator.matvec,
             n,
-            diagonal=regressor.kernel_operator.diagonal(),
+            diagonal=kernel_operator.diagonal(),
         )
+        regressor.preconditioner = preconditioner
         regressor.alpha, regressor.pcg_iterations_ = self.core.solve_pcg(
-            regressor.kernel_operator, regressor.preconditioner, y
+            kernel_operator, preconditioner, y
         )
         return regressor

@@ -59,7 +59,8 @@ class StreamingUpdater:
         old_n = regressor.embeddings.shape[0]
         regressor.embeddings = torch.cat([regressor.embeddings, new_embeddings], dim=0)
 
-        regressor.kernel_operator = self.core.build_kernel_operator(regressor.embeddings)
+        kernel_operator = self.core.build_kernel_operator(regressor.embeddings)
+        regressor.kernel_operator = kernel_operator
 
         old_alpha = regressor.alpha * forgetting_factor
         y_old = getattr(regressor, "y_train", None)
@@ -74,15 +75,16 @@ class StreamingUpdater:
             ]
         )
 
-        regressor.preconditioner = self.core.build_preconditioner(
-            regressor.kernel_operator.matvec,
+        preconditioner = self.core.build_preconditioner(
+            kernel_operator.matvec,
             regressor.embeddings.shape[0],
-            diagonal=regressor.kernel_operator.diagonal(),
+            diagonal=kernel_operator.diagonal(),
         )
+        regressor.preconditioner = preconditioner
 
         regressor.alpha, regressor.pcg_iterations_ = self.core.solve_pcg(
-            regressor.kernel_operator,
-            regressor.preconditioner,
+            kernel_operator,
+            preconditioner,
             y_extended,
             x0=x0,
         )
@@ -149,15 +151,16 @@ class StreamingUpdater:
         # Store final state on regressor for prediction
         regressor.embeddings = embeddings
         regressor.embedding_model = model
-        regressor.kernel_operator = self.core.build_kernel_operator(
+        kernel_operator = self.core.build_kernel_operator(
             embeddings, lambda_reg=sorted_lambdas[-1]
         )
+        regressor.kernel_operator = kernel_operator
         regressor.preconditioner = self.core.build_preconditioner(
-            regressor.kernel_operator.matvec,
+            kernel_operator.matvec,
             n,
             gamma=self.core.gamma,
             num_probes=self.core.num_probes,
-            diagonal=regressor.kernel_operator.diagonal(),
+            diagonal=kernel_operator.diagonal(),
         )
         regressor.alpha = alphas[-1]
         regressor.pcg_iterations_ = pcg_iters[-1]

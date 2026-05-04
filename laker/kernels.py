@@ -37,7 +37,10 @@ class KernelOperator(Protocol):
         ...
 
     def kernel_eval(
-        self, x: torch.Tensor, y: Optional[torch.Tensor] = None, **kwargs
+        self,
+        x: torch.Tensor,
+        y: Optional[torch.Tensor] = None,
+        chunk_size: Optional[int] = None,
     ) -> torch.Tensor:
         """Evaluate the kernel between points."""
         ...
@@ -491,7 +494,10 @@ class NystromAttentionKernelOperator:
         return k_approx
 
     def kernel_eval(
-        self, x: torch.Tensor, y: Optional[torch.Tensor] = None, **kwargs
+        self,
+        x: torch.Tensor,
+        y: Optional[torch.Tensor] = None,
+        chunk_size: Optional[int] = None,
     ) -> torch.Tensor:
         """Evaluate kernel between queries and training points."""
         if y is None:
@@ -592,7 +598,10 @@ class RandomFeatureAttentionKernelOperator:
         return k_approx
 
     def kernel_eval(
-        self, x: torch.Tensor, y: Optional[torch.Tensor] = None, **kwargs
+        self,
+        x: torch.Tensor,
+        y: Optional[torch.Tensor] = None,
+        chunk_size: Optional[int] = None,
     ) -> torch.Tensor:
         """Evaluate approximate kernel between queries and training points."""
         if y is None:
@@ -1429,7 +1438,7 @@ class SpectralAttentionKernelOperator:
         self,
         x: torch.Tensor,
         y: Optional[torch.Tensor] = None,
-        **kwargs,
+        chunk_size: Optional[int] = None,
     ) -> torch.Tensor:
         """Evaluate shaped kernel between queries and reference points.
 

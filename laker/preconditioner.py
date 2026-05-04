@@ -1,12 +1,15 @@
 """Preconditioner learning via shrinkage-regularised CCCP."""
 
 import logging
-from typing import Callable, Optional
+from typing import TYPE_CHECKING, Callable, Optional, Union
 
 import torch
 
 from laker.backend import get_default_device, get_default_dtype
 from laker.utils import adaptive_shrinkage_rho, eigh_stable
+
+if TYPE_CHECKING:
+    from laker.solvers import JacobiPreconditioner
 
 logger = logging.getLogger(__name__)
 
@@ -393,8 +396,8 @@ class AdaptivePreconditioner:
             dtype = get_default_dtype()
         self.device = device
         self.dtype = dtype
-        self._inner = None
-        self._inner_name = None
+        self._inner: Optional[Union["JacobiPreconditioner", CCCPPreconditioner]] = None
+        self._inner_name: Optional[str] = None
 
     def build(
         self,

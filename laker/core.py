@@ -22,7 +22,7 @@ from laker.kernels import (
     TwoScaleAttentionKernelOperator,
     exp_safe,
 )
-from laker.preconditioner import CCCPPreconditioner
+from laker.preconditioner import AdaptivePreconditioner, CCCPPreconditioner
 from laker.solvers import PreconditionedConjugateGradient
 
 logger = logging.getLogger(__name__)
@@ -288,12 +288,10 @@ class LAKERCore:
         num_probes: Optional[int] = None,
         seed: Optional[int] = None,
         diagonal: Optional[torch.Tensor] = None,
-    ) -> CCCPPreconditioner:
+    ) -> Union[CCCPPreconditioner, AdaptivePreconditioner]:
         """Learn the preconditioner for a given matvec."""
         if self.preconditioner_strategy == "adaptive":
-            from laker.preconditioner import AdaptivePreconditioner
-
-            preconditioner = AdaptivePreconditioner(
+            adaptive_precond = AdaptivePreconditioner(
                 gamma=gamma if gamma is not None else self.gamma,
                 num_probes=(num_probes if num_probes is not None else self.num_probes),
                 epsilon=self.epsilon,
@@ -304,8 +302,8 @@ class LAKERCore:
                 device=self.device,
                 dtype=self.dtype,
             )
-            preconditioner.build(matvec, n, diagonal=diagonal, seed=seed)
-            return preconditioner
+            adaptive_precond.build(matvec, n, diagonal=diagonal, seed=seed)
+            return adaptive_precond
 
         preconditioner = CCCPPreconditioner(
             num_probes=(num_probes if num_probes is not None else self.num_probes),
@@ -327,7 +325,7 @@ class LAKERCore:
     def solve_pcg(
         self,
         kernel_operator: KernelOperator,
-        preconditioner: CCCPPreconditioner,
+        preconditioner: Union[CCCPPreconditioner, AdaptivePreconditioner],
         rhs: torch.Tensor,
         x0: Optional[torch.Tensor] = None,
     ) -> tuple[torch.Tensor, int]:
@@ -562,7 +560,7 @@ class LAKERCore:
         embedding_model: nn.Module,
         embeddings: torch.Tensor,
         kernel_operator: KernelOperator,
-        preconditioner: CCCPPreconditioner,
+        preconditioner: Union[CCCPPreconditioner, AdaptivePreconditioner],
         alpha: torch.Tensor,
         lambda_reg: float,
     ) -> torch.Tensor:

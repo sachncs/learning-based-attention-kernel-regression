@@ -53,6 +53,7 @@ class DistributedAttentionKernelOperator:
         self.embedding_dim = embeddings.shape[1]
         self.lambda_reg = float(lambda_reg)
         self.master_device = master_device
+        self.device = master_device
         self.dtype = dtype
         self.shape = (self.n, self.n)
         # Delegating to AttentionKernelOperator for the single-device path.

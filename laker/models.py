@@ -11,7 +11,9 @@ import torch.nn as nn
 
 from laker.backend import to_tensor
 from laker.core import LAKERCore
+from laker.kernels import KernelOperator
 from laker.persistence import ModelPersistence
+from laker.preconditioner import AdaptivePreconditioner, CCCPPreconditioner
 from laker.search import HyperparameterSearch
 from laker.streaming import StreamingUpdater
 from laker.training import EmbeddingTrainer
@@ -189,8 +191,8 @@ class LAKERRegressor:
         # --- fitted state ---------------------------------------------------
         self.embeddings: Optional[torch.Tensor] = None
         self.alpha: Optional[torch.Tensor] = None
-        self.kernel_operator = None
-        self.preconditioner = None
+        self.kernel_operator: Optional[KernelOperator] = None
+        self.preconditioner: Optional[Union[CCCPPreconditioner, AdaptivePreconditioner]] = None
         self.embedding_model: Optional[nn.Module] = None
         self.residual_corrector = residual_corrector
         self.x_train: Optional[torch.Tensor] = None
@@ -241,15 +243,17 @@ class LAKERRegressor:
         self.x_train = x
         self.y_train = y
         self.embeddings, self.embedding_model = self._core.compute_embeddings(x)
-        self.kernel_operator = self._core.build_kernel_operator(self.embeddings)
-        self.preconditioner = self._core.build_preconditioner(
-            self.kernel_operator.matvec,
+        kernel_operator = self._core.build_kernel_operator(self.embeddings)
+        self.kernel_operator = kernel_operator
+        preconditioner = self._core.build_preconditioner(
+            kernel_operator.matvec,
             self.embeddings.shape[0],
             seed=seed,
-            diagonal=self.kernel_operator.diagonal(),
+            diagonal=kernel_operator.diagonal(),
         )
+        self.preconditioner = preconditioner
         self.alpha, self.pcg_iterations_ = self._core.solve_pcg(
-            self.kernel_operator, self.preconditioner, y, x0=x0
+            kernel_operator, preconditioner, y, x0=x0
         )
         return self
 

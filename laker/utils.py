@@ -118,7 +118,7 @@ class GPSurrogate:
         z = x.copy()
         for i in self.log_indices:
             lb = self.bounds[i, 0] * 0.1
-            ub = self.bounds[i, 1] * 10
+            ub = float(self.bounds[i, 1]) * 10
             lb = max(lb, 1e-12)
             z[:, i] = numpy.log10(numpy.clip(z[:, i], lb, ub))
         z = (z - self.bounds[:, 0]) / (self.bounds[:, 1] - self.bounds[:, 0])
