@@ -228,9 +228,7 @@ class EmbeddingTrainer:
         regressor.kernel_operator = kernel_op
         precond = regressor.preconditioner
         assert precond is not None
-        regressor.alpha, regressor.pcg_iterations_ = self.core.solve_pcg(
-            kernel_op, precond, y
-        )
+        regressor.alpha, regressor.pcg_iterations_ = self.core.solve_pcg(kernel_op, precond, y)
         return regressor
 
     def fit_residual_corrector(

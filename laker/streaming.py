@@ -280,9 +280,7 @@ class StreamingUpdater:
         # Store final state on regressor for prediction
         regressor.embeddings = embeddings
         regressor.embedding_model = model
-        kernel_operator = self.core.build_kernel_operator(
-            embeddings, lambda_reg=sorted_lambdas[-1]
-        )
+        kernel_operator = self.core.build_kernel_operator(embeddings, lambda_reg=sorted_lambdas[-1])
         regressor.kernel_operator = kernel_operator
         regressor.preconditioner = self.core.build_preconditioner(
             kernel_operator.matvec,
