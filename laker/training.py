@@ -173,6 +173,15 @@ class EmbeddingTrainer:
         optimizer = torch.optim.Adam(trainable, lr=lr)
         best_loss = float("inf")
         patience_counter = 0
+        # Snapshot of the best (embeddings, alpha) pair seen so far.  The
+        # last-epoch state is not necessarily optimal because alpha is only
+        # re-solved every ``rebuild_freq`` epochs, so the final residual can
+        # be larger than the best one when the embedding MLP wanders after
+        # the last rebuild.  We restore the best snapshot at the end of the
+        # loop instead.
+        best_state: Optional[tuple[torch.Tensor, torch.Tensor]] = None
+        best_precond = None
+        best_kernel_op = None
 
         for epoch in range(epochs):
             optimizer.zero_grad()
@@ -212,6 +221,12 @@ class EmbeddingTrainer:
 
             if loss_item < best_loss:
                 best_loss = loss_item
+                # Snapshot the detached state so we can restore the
+                # embeddings/alpha pair that produced this loss even if
+                # the embedding MLP continues to drift in later epochs.
+                best_state = (embeddings.detach().clone(), alpha.detach().clone())
+                best_precond = precond
+                best_kernel_op = kernel_op
                 patience_counter = 0
             else:
                 patience_counter += 1
@@ -224,10 +239,22 @@ class EmbeddingTrainer:
                         )
                     break
 
-        regressor.embeddings = embeddings.detach()
+        # Restore the best snapshot.  When training improves monotonically
+        # the last epoch and the best epoch coincide, so this is a no-op
+        # for well-behaved runs; it only matters when the final epoch
+        # overshoots the optimum after the last alpha-rebuild.
+        if best_state is not None:
+            embeddings, alpha = best_state
+            precond = best_precond
+            kernel_op = best_kernel_op
+        else:
+            precond = regressor.preconditioner
+            assert precond is not None
+            embeddings = embeddings.detach()
+
+        regressor.embeddings = embeddings
         regressor.kernel_operator = kernel_op
-        precond = regressor.preconditioner
-        assert precond is not None
+        regressor.preconditioner = precond
         regressor.alpha, regressor.pcg_iterations_ = self.core.solve_pcg(kernel_op, precond, y)
         return regressor
 
