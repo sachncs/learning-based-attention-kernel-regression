@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 | `e7df536` | 2026-07-12 13:26:39 +05:30 | docs: add module docstrings to benchmarks/ and examples/ |
 | `424d077` | 2026-07-12 13:26:54 +05:30 | docs: standardise test docstrings and update renamed references |
 | `8d99bcb` | 2026-07-12 13:26:58 +05:30 | docs: expand docstring conventions in CONTRIBUTING.md and add Python 3.13 classifier |
+| `90f4bb4` | 2026-07-12 13:30:00 +05:30 | docs: rewrite README.md with reference-style structure |
 
 ## [0.4.0] - 2026-05-04
 
