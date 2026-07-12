@@ -1,4 +1,26 @@
-"""Compare exact vs low-rank kernel approximations."""
+"""Compare exact vs low-rank kernel approximations.
+
+This module benchmarks and compares three kernel operator
+implementations available in the LAKER package:
+
+* **Exact** — :class:`~laker.kernels.AttentionKernelOperator`
+  computing :math:`K_{ij} = \\exp(x_i^\\top x_j)` directly.
+* **Nyström** — :class:`~laker.kernels.NystromAttentionKernelOperator`
+  using the Nyström method with :math:`m` landmark points for a
+  rank-:math:`m` approximation of :math:`K`.
+* **Random Fourier Features (RFF)**
+  — :class:`~laker.kernels.RandomFeatureAttentionKernelOperator`
+  using :math:`p` random features for a Monte Carlo approximation of
+  the kernel.
+
+Both matrix-vector product speed and end-to-end model fit time are
+measured.  Approximation error is reported as the relative :math:`\\ell_2`
+error :math:`\\|Kx - \\tilde{K}x\\|_2 / \\|Kx\\|_2`.
+
+Run this module directly to execute all approximation benchmarks::
+
+    python -m benchmarks.approximations
+"""
 
 import logging
 from typing import Optional
@@ -17,7 +39,21 @@ logger = logging.getLogger(__name__)
 
 
 class ApproximationBenchmarkSuite:
-    """Suite of benchmarks comparing exact and approximate kernel operators."""
+    """Suite of benchmarks comparing exact and approximate kernel operators.
+
+    Measures the trade-off between computational speed and approximation
+    accuracy across the exact, Nyström, and RFF kernel operators.
+
+    Args:
+        executor: Optional pre-configured
+            :class:`~benchmarks.executor.BenchmarkExecutor`.  When
+            ``None`` a new executor with default settings is created.
+
+    Attributes:
+        dtype: Default floating-point dtype for tensors (``float64``).
+        lambda_reg: Regularisation weight :math:`\\lambda` for the
+            kernel ridge :math:`K + \\lambda I`.
+    """
 
     def __init__(self, executor: Optional[BenchmarkExecutor] = None):
         self.executor = executor if executor is not None else BenchmarkExecutor()
@@ -52,7 +88,23 @@ class ApproximationBenchmarkSuite:
         return suite.full_fit(n)
 
     def kernel_speed(self, n: int = 2000, dim: int = 10) -> dict:
-        """Benchmark matvec speed for exact and approximate kernels."""
+        """Benchmark matvec speed for exact and approximate kernels.
+
+        Constructs exact, Nyström (200 landmarks), and RFF (400
+        features) kernel operators from a shared random embedding
+        matrix and measures per-iteration matvec time.  Also computes
+        the relative :math:`\\ell_2` error of each approximation
+        against the exact kernel.
+
+        Args:
+            n: Number of data points.
+            dim: Embedding dimension.
+
+        Returns:
+            Dictionary with keys ``n``, ``exact_ms``, ``nystrom_ms``,
+            ``rff_ms``, ``nystrom_error`` (relative :math:`\\ell_2`
+            error), and ``rff_error``.
+        """
         torch.manual_seed(42)
         embeddings = torch.randn(n, dim, dtype=self.dtype)
         vector = torch.randn(n, dtype=self.dtype)
@@ -114,7 +166,21 @@ class ApproximationBenchmarkSuite:
         }
 
     def full_fit(self, n: int = 500) -> dict:
-        """Benchmark full model fit with exact and approximate kernels."""
+        """Benchmark full model fit with exact and approximate kernels.
+
+        Fits a :class:`~laker.models.LAKERRegressor` three times on
+        the same synthetic 2-D dataset: once with the exact kernel,
+        once with Nyström approximation, and once with RFF.
+
+        Args:
+            n: Number of training samples.
+
+        Returns:
+            Dictionary with key ``n`` and sub-dictionaries keyed by
+            ``"exact"``, ``"nystrom"``, and ``"rff"``, each containing
+            ``fit_ms`` (fit time in milliseconds) and ``pcg_iters``
+            (PCG iteration count).
+        """
         torch.manual_seed(42)
         x = torch.rand(n, 2, dtype=self.dtype) * 100.0
         y = torch.randn(n, dtype=self.dtype)
@@ -152,7 +218,12 @@ class ApproximationBenchmarkSuite:
         return {"n": n, **results}
 
     def run_all(self) -> None:
-        """Run all approximation benchmarks."""
+        """Run all approximation benchmarks.
+
+        Executes kernel matvec comparisons at :math:`n = 2000` and
+        :math:`n = 5000`, and full-fit comparisons at :math:`n = 500`
+        and :math:`n = 1000`.
+        """
         logger.info("=== Kernel Matvec Speed ===")
         self.kernel_speed(n=2000)
         self.kernel_speed(n=5000)

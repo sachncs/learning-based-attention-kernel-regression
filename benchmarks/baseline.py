@@ -1,7 +1,22 @@
 """Baseline vs Optimised comparison for README.
 
-This script runs the *current* code with fixed seeds and reports numbers
-that can be compared against the pre-optimisation baseline.
+This module compares the *current* (optimised) implementation against
+recorded baseline timing numbers for the three main computational
+bottlenecks of LAKER:
+
+1. Attention kernel matrix-vector product at :math:`n = 5000`.
+2. CCCP preconditioner build at :math:`n = 5000`.
+3. Full :class:`~laker.models.LAKERRegressor` fit at :math:`n = 1000`.
+
+Each configuration is run with fixed random seeds
+(``torch.manual_seed(42)``) so that results are deterministic on the
+same hardware and PyTorch version.  Speed-up ratios are computed
+against baseline measurements collected on 2026-04-30 (Apple M3,
+Python 3.13, PyTorch 2.11.0).
+
+Run this module directly to print the comparison table::
+
+    python -m benchmarks.baseline
 """
 
 import logging
@@ -18,7 +33,17 @@ logger = logging.getLogger(__name__)
 
 
 class BaselineComparison:
-    """Compares current performance against recorded baseline numbers."""
+    """Compares current performance against recorded baseline numbers.
+
+    Runs a fixed set of benchmarks (kernel matvec, preconditioner build,
+    full fit) at the baseline problem sizes and computes speed-up ratios
+    relative to previously recorded timings.
+
+    Args:
+        executor: Optional pre-configured
+            :class:`~benchmarks.executor.BenchmarkExecutor`.  When
+            ``None`` a new executor with default settings is created.
+    """
 
     def __init__(self, executor: Optional[BenchmarkExecutor] = None):
         self.executor = executor if executor is not None else BenchmarkExecutor()
@@ -39,11 +64,38 @@ class BaselineComparison:
         return comparison.run_comparison(label, dtype, pcg_tol)
 
     def format_number(self, n: float) -> str:
-        """Format a number to three decimal places."""
+        """Format a floating-point number to three decimal places.
+
+        Args:
+            n: The number to format.
+
+        Returns:
+            String representation with exactly three digits after the
+            decimal point.
+        """
         return f"{n:.3f}"
 
     def run_comparison(self, label: str, dtype: torch.dtype, pcg_tol: float) -> dict:
-        """Run a single comparison configuration."""
+        """Run a single comparison configuration.
+
+        Executes three benchmarks sequentially with deterministic seeds:
+
+        1. Attention kernel matvec (:math:`n = 5000`, 50 measured
+           repetitions).
+        2. CCCP preconditioner build (:math:`n = 5000`).
+        3. Full model fit (:math:`n = 1000`).
+
+        Args:
+            label: Identifier prepended to benchmark names for logging.
+            dtype: PyTorch dtype for all tensor operations.
+            pcg_tol: Convergence tolerance for the PCG solver used in
+                the full-fit benchmark.
+
+        Returns:
+            Dictionary with keys ``matvec_5000`` (ms),
+            ``preconditioner_build_5000`` (ms), ``fit_1000`` (ms), and
+            ``fit_1000_pcg_iters`` (PCG iteration count or ``None``).
+        """
         torch.manual_seed(42)
         results = {}
 
@@ -113,7 +165,12 @@ class BaselineComparison:
         return results
 
     def run_all(self) -> None:
-        """Run all comparison configurations and print summary."""
+        """Run all comparison configurations and print summary.
+
+        Executes optimised benchmarks for both ``float64`` and
+        ``float32`` dtypes, then computes and logs speed-up ratios
+        against the hardcoded baseline numbers.
+        """
         logger.info(
             "Label                  matvec(5000)  preconditioner_build(5000)  fit(1000)  pcg_iters"
         )
