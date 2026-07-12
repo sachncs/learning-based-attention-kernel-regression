@@ -112,12 +112,62 @@ open htmlcov/index.html
 
 ### Docstrings
 
-All public classes and functions must have Google-style docstrings with:
-- A one-line summary.
-- A longer description if needed.
-- `Args:` section for parameters.
-- `Returns:` section for return values.
-- `Examples:` section where applicable.
+All public and private classes, functions, and modules must have Google-style
+docstrings. Every module (`.py` file) must start with a module-level docstring
+explaining its purpose and relationship to the rest of the package.
+
+**Module docstrings** should:
+- Start with a one-line summary of the module's purpose.
+- Describe the public API surface (classes, functions, constants).
+- Reference the mathematical notation used (e.g. ``:math:`G = \exp(E E^T)```).
+- List submodules and their roles when the module is a package entry point.
+
+**Class docstrings** should:
+- Start with a one-line summary.
+- Include an `Attributes:` section for public state.
+- Include an `Args:` section for constructor parameters.
+- Reference the relevant paper sections or equations where applicable.
+
+**Function/method docstrings** should:
+- Start with a one-line summary.
+- Include `Args:` for all parameters (including `self` is not needed).
+- Include `Returns:` for non-`None` return values.
+- Include `Raises:` for explicitly raised exceptions.
+- Include `Side effects:` when the function mutates state or logs.
+- Include `Example:` blocks for public API methods.
+- Use `:math:` directives for mathematical notation.
+
+**Test docstrings** should:
+- Every test function must have a one-line docstring describing what it tests.
+- Test classes must have a docstring describing the group of tests.
+- Test modules must have a module-level docstring.
+
+**Example convention:**
+
+```python
+def solve(operator, rhs, tol=1e-10):
+    """Solve ``A x = b`` using preconditioned conjugate gradient.
+
+    The solver iterates until ``||b - A x|| / ||b|| <= tol`` or
+    ``max_iter`` is reached.
+
+    Args:
+        operator: Callable applying ``A`` to a vector of shape ``(n,)``.
+        rhs: Right-hand side vector of shape ``(n,)``.
+        tol: Relative residual tolerance. Default ``1e-10``.
+
+    Returns:
+        Solution tensor of shape ``(n,)``.
+
+    Raises:
+        RuntimeError: If the iteration encounters negative curvature.
+
+    Example:
+        >>> x = solve(A, b, tol=1e-8)
+        >>> torch.linalg.norm(A(x) - b) / torch.linalg.norm(b)
+        tensor(1.2345e-08)
+    """
+```
 
 ### Pull Request Process
 
