@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Comprehensive module-, class-, and method-level docstrings with Google-style parameter, return, and example sections across the entire codebase (``laker/``, ``benchmarks/``, ``examples/``, ``tests/``).
+- Algorithm background sections (paper references, mathematical framing) for key modules (``bilevel``, ``implicit_diff``, ``preconditioner``, ``search``, ``streaming``, ``training``, ``persistence``, ``core``).
+- Module-level docstrings for ``benchmarks/`` and ``examples/`` packages.
+- Detailed docstring conventions in ``CONTRIBUTING.md`` with examples for modules, classes, functions, and tests.
+- Added Python 3.13 classifier to ``pyproject.toml``.
+
+### Changed
+- Promoted all semi-private (single-underscore-prefixed) names to public:
+  - ``LAKERRegressor`` attributes: ``_core`` → ``core``, ``_search`` → ``search``, ``_streaming`` → ``streaming``, ``_trainer`` → ``trainer``, ``_persistence`` → ``persistence``.
+  - ``LAKERRegressor`` class constant: ``_HYPERPARAMS`` → ``HYPERPARAMS``.
+  - ``NystromAttentionKernelOperator`` methods: ``_select_landmarks_greedy`` → ``select_landmarks_greedy``, ``_select_landmarks_leverage`` → ``select_landmarks_leverage``.
+  - ``AdaptivePreconditioner`` attributes: ``_inner`` → ``inner``, ``_inner_name`` → ``inner_name``.
+
+### Atomic commits in this release
+
+| Commit | Date (UTC+05:30) | Subject |
+|--------|------------------|---------|
+| `de62027` | 2026-07-12 13:26:35 +05:30 | docs: comprehensive module/class/method docstrings across laker/ |
+| `e7df536` | 2026-07-12 13:26:39 +05:30 | docs: add module docstrings to benchmarks/ and examples/ |
+| `424d077` | 2026-07-12 13:26:54 +05:30 | docs: standardise test docstrings and update renamed references |
+| `8d99bcb` | 2026-07-12 13:26:58 +05:30 | docs: expand docstring conventions in CONTRIBUTING.md and add Python 3.13 classifier |
+
 ## [0.4.0] - 2026-05-04
 
 ### Added
