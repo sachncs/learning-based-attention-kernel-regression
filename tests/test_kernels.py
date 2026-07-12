@@ -6,6 +6,7 @@ from laker.kernels import AttentionKernelOperator
 
 
 def test_kernel_shape():
+    """Test that AttentionKernelOperator reports correct shape attributes."""
     n = 20
     de = 5
     e = torch.randn(n, de)
@@ -51,6 +52,7 @@ def test_kernel_matvec_chunked_consistency():
 
 
 def test_kernel_diagonal():
+    """Test that diagonal matches the analytical formula."""
     n = 15
     e = torch.randn(n, 3)
     lam = 0.2
@@ -62,6 +64,7 @@ def test_kernel_diagonal():
 
 
 def test_kernel_eval():
+    """Test that kernel_eval matches explicit kernel computation."""
     n = 10
     m = 5
     de = 4

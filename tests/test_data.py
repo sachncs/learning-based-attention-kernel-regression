@@ -6,6 +6,7 @@ from laker.data import generate_grid, generate_radio_field
 
 
 def test_generate_radio_field_shape():
+    """Test that generate_radio_field returns correct shapes and types."""
     n = 50
     locs = torch.rand(n, 2) * 100.0
     tx = torch.tensor([[30.0, 70.0]])
@@ -18,6 +19,7 @@ def test_generate_radio_field_shape():
 
 
 def test_generate_radio_field_seed_reproducibility():
+    """Test that same seed produces reproducible noisy measurements."""
     n = 20
     locs = torch.rand(n, 2) * 100.0
     tx = torch.tensor([[50.0, 50.0]])
@@ -28,6 +30,7 @@ def test_generate_radio_field_seed_reproducibility():
 
 
 def test_generate_grid():
+    """Test that generate_grid produces correct shape and bounds."""
     grid = generate_grid((0.0, 100.0, 0.0, 100.0), grid_size=10)
     assert grid.shape == (100, 2)
     assert grid[0, 0].item() == 0.0

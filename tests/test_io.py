@@ -9,6 +9,7 @@ from laker.models import LAKERRegressor
 
 
 def test_save_and_load():
+    """Test that save and load roundtrip preserves model state and predictions."""
     n = 40
     x = torch.rand(n, 2) * 100.0
     y = torch.randn(n)
@@ -43,6 +44,7 @@ def test_save_and_load():
 
 
 def test_save_and_load_with_corrector():
+    """Test that save and load preserves residual corrector and predictions."""
     n = 40
     x = torch.rand(n, 2) * 100.0
     y = torch.randn(n)

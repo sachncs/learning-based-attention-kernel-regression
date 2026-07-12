@@ -118,7 +118,7 @@ def test_leverage_scores_properties():
         dtype=dtype,
     )
 
-    # Leverage scores are computed internally in _select_landmarks_leverage.
+    # Leverage scores are computed internally in select_landmarks_leverage.
     # We verify the landmarks are valid (distinct, in range).
     idx = op.landmark_indices
     assert idx.unique().numel() == idx.numel(), "Landmarks must be distinct"
@@ -249,7 +249,7 @@ def test_predict_train_matches_predict():
 
     # predict_train is differentiable but with no_grad it should match
     with torch.no_grad():
-        pred_train = model._core.predict_train(
+        pred_train = model.core.predict_train(
             x=x_test,
             embedding_model=model.embedding_model,
             embeddings=model.embeddings,
@@ -288,7 +288,7 @@ def test_predict_variance_train_matches_predict_variance_rff():
     var_normal = model.predict_variance(x_test)
 
     with torch.no_grad():
-        var_train = model._core.predict_variance_train(
+        var_train = model.core.predict_variance_train(
             x=x_test,
             embedding_model=model.embedding_model,
             embeddings=model.embeddings,
