@@ -1,4 +1,41 @@
-"""Model persistence: save and load LAKER models."""
+"""Model persistence: save and load LAKER models.
+
+This module provides :class:`ModelPersistence`, a utility class that handles
+serialization and deserialization of fitted LAKER models to and from disk.
+
+**State dict format.**
+The ``save`` method collects all hyperparameters, fitted tensors (embeddings,
+alpha), and (optionally) neural network state dicts (embedding model and
+residual corrector) into a single dictionary and writes it with
+:func:`torch.save`.  The embedding model's class name and module path are
+recorded so that ``load`` can reconstruct the correct module type via
+:func:`importlib.import_module`.
+
+**Custom module support.**
+If the saved embedding model or residual corrector is a custom ``nn.Module``
+subclass, the loader will attempt to import it from its original module
+path.  If the import fails (e.g. the class is not on ``sys.path``), the
+loader falls back to :class:`~laker.embeddings.PositionEmbedding` and logs
+a warning.  For reliable round-tripping of custom modules, ensure they are
+importable from the same dotted path used during training.
+
+**Kernel operator reconstruction.**
+On ``load``, the kernel operator is reconstructed from the stored
+``kernel_approx`` string, selecting the appropriate
+:class:`~laker.kernels.KernelOperator` subclass (exact, Nyström, RFF,
+k-NN, SKI, or two-scale).
+
+Usage::
+
+    from laker.models import LAKERRegressor
+
+    reg = LAKERRegressor()
+    reg.fit(x_train, y_train)
+    reg.save("my_model.pt")
+
+    loaded = LAKERRegressor.load("my_model.pt")
+    loaded.predict(x_test)
+"""
 
 from __future__ import annotations
 
@@ -14,11 +51,50 @@ logger = logging.getLogger(__name__)
 
 
 class ModelPersistence:
-    """Handles serialization and deserialization of LAKER models."""
+    """Handles serialization and deserialization of LAKER models.
+
+    This class provides static methods for saving a fitted
+    :class:`~laker.models.LAKERRegressor` to disk and loading it back,
+    preserving all hyperparameters, learned embeddings, solver state, and
+    optionally the neural network weights of the embedding model and
+    residual corrector.
+
+    The serialized format is a single dictionary written with
+    :func:`torch.save` containing:
+
+    * All regressor hyperparameters (``embedding_dim``, ``lambda_reg``, etc.).
+    * Fitted tensors: ``embeddings`` and ``alpha``.
+    * (Optional) ``embedding_model_state``, ``embedding_model_class``, and
+      ``embedding_model_module`` for reconstructing the embedding network.
+    * (Optional) ``residual_corrector_state``, ``residual_corrector_class``,
+      and ``residual_corrector_module`` for the corrector MLP.
+    """
 
     @staticmethod
     def save(regressor: "LAKERRegressor", path: str) -> None:
-        """Serialize the fitted model to disk."""
+        """Serialize the fitted model to disk.
+
+        Collects all hyperparameters, fitted tensors, and (optionally)
+        neural network state dicts into a single dictionary and writes it
+        to ``path`` using :func:`torch.save`.
+
+        Args:
+            regressor: A fitted :class:`~laker.models.LAKERRegressor`
+                instance.  Must have ``alpha`` not ``None`` (i.e. must
+                have been fitted via :meth:`~laker.models.LAKERRegressor.fit`
+                or equivalent).
+            path: Filesystem path where the serialized model will be
+                written.  Overwrites any existing file at this location.
+
+        Raises:
+            RuntimeError: If the regressor has not been fitted (``alpha``
+                is ``None``).
+
+        Examples:
+            >>> reg = LAKERRegressor()
+            >>> reg.fit(x_train, y_train)
+            >>> ModelPersistence.save(reg, "model.pt")
+        """
         if regressor.alpha is None:
             raise RuntimeError("Model has not been fitted. Call fit() before saving.")
         state: dict[str, Any] = {
@@ -62,7 +138,35 @@ class ModelPersistence:
 
     @staticmethod
     def load(path: str) -> "LAKERRegressor":
-        """Deserialize a model from disk."""
+        """Deserialize a model from disk.
+
+        Reconstructs a :class:`~laker.models.LAKERRegressor` with all
+        hyperparameters, fitted tensors, and neural network weights
+        restored from the file written by :meth:`save`.
+
+        The embedding model and residual corrector are reconstructed by
+        importing their original class via :func:`importlib.import_module`.
+        If the import fails (e.g. the class is not on ``sys.path``), the
+        loader falls back to the default
+        :class:`~laker.embeddings.PositionEmbedding` for the embedding
+        model and skips the residual corrector, logging a warning.
+
+        The kernel operator is rebuilt from the stored ``kernel_approx``
+        string, selecting the appropriate
+        :class:`~laker.kernels.KernelOperator` subclass.
+
+        Args:
+            path: Filesystem path to the serialized model file written by
+                :meth:`save`.
+
+        Returns:
+            A fully reconstructed :class:`~laker.models.LAKERRegressor`
+            instance ready for prediction.
+
+        Examples:
+            >>> reg = LAKERRegressor.load("model.pt")
+            >>> reg.predict(x_test)
+        """
         state = torch.load(path, weights_only=False)
         dtype = torch.float32 if "float32" in state["dtype"] else torch.float64
         embedding_dtype = (

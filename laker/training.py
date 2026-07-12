@@ -1,4 +1,49 @@
-"""End-to-end embedding training and residual correction."""
+"""End-to-end embedding training, residual correction, and bilevel learning.
+
+This module provides the :class:`EmbeddingTrainer` class, which implements
+several training strategies for the LAKER pipeline:
+
+**End-to-end embedding optimisation** (:meth:`EmbeddingTrainer.fit_learned_embeddings`):
+    Gradient-based optimisation of a neural embedding MLP on the regression
+    objective :math:`\\frac{1}{2}\\|K(E)\\alpha - y\\|_2^2`.  The kernel
+    matrix :math:`K(E) = \\exp(E E^\\top)` depends on the learned embedding
+    :math:`E`, enabling back-propagation through the attention kernel.  A
+    full PCG re-solve is performed every ``rebuild_freq`` epochs to keep the
+    weight vector :math:`\\alpha` on the normal equation manifold.
+
+**Residual correction** (:meth:`EmbeddingTrainer.fit_residual_corrector`):
+    Trains a small auxiliary MLP on the residual
+    :math:`r = y - \\hat{y}_{\\text{laker}}` after the base LAKER fit.
+    The corrector prediction is added to the base output to compensate for
+    local model misspecification without destabilising the kernel solver.
+
+**Bilevel hyperparameter learning** (:meth:`EmbeddingTrainer.fit_bilevel`):
+    Uses implicit differentiation through the PCG fixed-point to compute
+    hypergradients for continuous hyperparameters (e.g. ``lambda_reg``,
+    embedding weights).  An outer-loop Adam optimiser minimises validation
+    loss while the inner solve is held approximately at stationarity.
+
+**Uncertainty-aware training** (:meth:`EmbeddingTrainer.fit_uncertainty_aware`):
+    Jointly optimises embeddings on a negative log-likelihood (NLL) plus a
+    calibration penalty:
+
+    .. math::
+
+        \\mathcal{L} = \\text{NLL}(y \\mid \\mu, \\sigma^2)
+        + \\beta \\,(\\mathbb{E}[r^2] - \\mathbb{E}[\\sigma^2])^2
+
+    where :math:`\\mu` and :math:`\\sigma^2` are the LAKER predictive mean
+    and variance respectively.  This prevents overconfident predictions and
+    improves uncertainty quantification for downstream tasks such as active
+    sensing.
+
+All training methods follow the same pattern:
+
+1. Validate input shapes and model state.
+2. Run an optimisation loop with early stopping.
+3. Update the fitted state on the :class:`~laker.models.LAKERRegressor`
+   (embeddings, kernel operator, preconditioner, alpha).
+"""
 
 from __future__ import annotations
 
@@ -19,10 +64,30 @@ logger = logging.getLogger(__name__)
 
 
 class EmbeddingTrainer:
-    """Trains embedding models and residual correctors."""
+    """Coordinates embedding and residual-corrector training for LAKER.
+
+    The trainer holds a reference to the :class:`~laker.core.LAKERCore`
+    pipeline instance which provides the kernel builder, preconditioner,
+    and PCG solver.  It does **not** own any trainable state itself;
+    instead it mutates the fitted attributes on the
+    :class:`~laker.models.LAKERRegressor` that is passed to each method.
+
+    Attributes:
+        core: The :class:`~laker.core.LAKERCore` pipeline providing kernel
+            construction, preconditioning, and solve routines.
+
+    Args:
+        core: The LAKER pipeline core instance.
+    """
 
     def __init__(self, core: "LAKERCore") -> None:
-        """Initialise the embedding trainer."""
+        """Initialise the embedding trainer.
+
+        Args:
+            core: The :class:`~laker.core.LAKERCore` pipeline instance that
+                provides kernel construction, preconditioner building, and
+                PCG solve routines used throughout training.
+        """
         self.core = core
 
     def fit_learned_embeddings(
@@ -35,7 +100,53 @@ class EmbeddingTrainer:
         rebuild_freq: int = 10,
         patience: int = 5,
     ) -> "LAKERRegressor":
-        """Optimise the embedding MLP weights end-to-end on the regression objective."""
+        """Optimise the embedding MLP weights end-to-end on the regression objective.
+
+        Performs gradient-based training of the neural embedding network by
+        minimising the least-squares loss
+
+        .. math::
+
+            \\mathcal{L}(\\theta) = \\frac{1}{2}\\|K(\\theta)\\alpha - y\\|_2^2
+
+        where :math:`K(\\theta) = \\exp(E(\\theta) E(\\theta)^\\top)` is the
+        attention kernel parameterised by the embedding weights :math:`\\theta`.
+        Every ``rebuild_freq`` epochs the preconditioner is recomputed and
+        :math:`\\alpha` is re-solved via PCG to keep the solution on the
+        normal equation manifold.
+
+        Args:
+            regressor: The :class:`~laker.models.LAKERRegressor` whose
+                ``embedding_model`` will be optimised.  The regressor must
+                have been fitted at least once (so that ``embedding_model``
+                is not ``None``).
+            x: Training locations of shape ``(n, d)`` where ``n`` is the
+                number of samples and ``d`` the spatial dimension.
+            y: Training observations of shape ``(n,)``.
+            lr: Learning rate for the Adam optimiser.
+            epochs: Maximum number of optimisation epochs.
+            rebuild_freq: Frequency (in epochs) at which the preconditioner
+                is rebuilt and ``alpha`` is re-solved.
+            patience: Number of epochs without improvement before early
+                stopping.
+
+        Returns:
+            The same ``regressor`` instance with updated ``embeddings``,
+            ``alpha``, ``kernel_operator``, and ``preconditioner`` attributes.
+
+        Raises:
+            ValueError: If ``x`` is not 2-D or ``y`` is not 1-D.
+            RuntimeError: If the regressor has no embedding model or no
+                trainable parameters.
+
+        Examples:
+            >>> from laker.models import LAKERRegressor
+            >>> reg = LAKERRegressor(embedding_dim=16, kernel_approx="rff",
+            ...                      num_features=128)
+            >>> reg.fit(x_train, y_train)
+            >>> reg.fit_learned_embeddings(x_train, y_train, lr=5e-4,
+            ...                           epochs=100)
+        """
         if x.dim() != 2:
             raise ValueError(f"x must be 2-D, got shape {x.shape}")
         if y.dim() != 1:
@@ -133,7 +244,46 @@ class EmbeddingTrainer:
         weight_decay: float = 1e-2,
         lr: float = 1e-3,
     ) -> "LAKERRegressor":
-        """Train a small residual corrector on ``y - y_hat_laker``."""
+        """Train a small residual corrector on ``y - y_hat_laker``.
+
+        After the base LAKER fit, a lightweight MLP corrector is trained to
+        predict the residual :math:`r = y - \\hat{y}_{\\text{laker}}` from the
+        raw spatial coordinates.  The corrector prediction is added to the base
+        LAKER output at inference time, compensating for local model
+        misspecification without destabilising the kernel solver.
+
+        Training uses a held-out validation split (``val_fraction`` of the
+        training data) for early stopping.  The best model state (by
+        validation loss) is restored after training.
+
+        Args:
+            regressor: The :class:`~laker.models.LAKERRegressor` whose base
+                fit will be refined.  Must already be fitted (``alpha`` and
+                ``embeddings`` must not be ``None``).
+            x: Training locations of shape ``(n, d)``.
+            y: Training observations of shape ``(n,)``.
+            val_fraction: Fraction of the training data held out for
+                validation and early stopping.  Must be in ``(0, 1)``.
+            epochs: Maximum number of training epochs.
+            patience: Number of consecutive validation epochs without
+                improvement before early stopping.
+            weight_decay: L2 regularisation coefficient for the Adam
+                optimiser.
+            lr: Learning rate for the Adam optimiser.
+
+        Returns:
+            The same ``regressor`` instance with ``residual_corrector``
+            populated or updated.
+
+        Raises:
+            ValueError: If ``x`` is not 2-D or ``y`` is not 1-D.
+            RuntimeError: If the model has not been fitted yet.
+
+        Examples:
+            >>> reg = LAKERRegressor()
+            >>> reg.fit(x_train, y_train)
+            >>> reg.fit_residual_corrector(x_train, y_train, val_fraction=0.3)
+        """
         if regressor.alpha is None or regressor.embeddings is None:
             raise RuntimeError(
                 "Model has not been fitted. Call fit() before fit_residual_corrector()."
@@ -234,7 +384,43 @@ class EmbeddingTrainer:
         epochs: int = 20,
         patience: int = 5,
     ) -> "LAKERRegressor":
-        """Optimise hyperparameters via bilevel learning with implicit differentiation."""
+        """Optimise hyperparameters via bilevel learning with implicit differentiation.
+
+        Formulates hyperparameter optimisation as a bilevel problem:
+
+        .. math::
+
+            \\min_{\\theta} \\; \\mathcal{L}_{\\text{val}}(\\alpha^*(\\theta), \\theta)
+            \\quad \\text{s.t.} \\quad (K(\\theta) + \\lambda I)\\alpha^*(\\theta) = y
+
+        where the inner problem (PCG solve) is differentiated through using
+        implicit differentiation (Neumann-series approximation of the
+        hypergradient).  An outer-loop Adam optimiser updates the
+        hyperparameters :math:`\\theta` (e.g. ``lambda_reg``, embedding
+        weights) to minimise validation loss.
+
+        Delegates the actual computation to
+        :class:`~laker.bilevel.BilevelOptimizer`.
+
+        Args:
+            regressor: The :class:`~laker.models.LAKERRegressor` to optimise.
+            x_train: Training locations of shape ``(n, d)``.
+            y_train: Training observations of shape ``(n,)``.
+            x_val: Validation locations of shape ``(m, d)``.
+            y_val: Validation observations of shape ``(m,)``.
+            lr: Learning rate for the outer-loop Adam optimiser.
+            epochs: Maximum number of outer-loop epochs.
+            patience: Early-stopping patience on validation loss.
+
+        Returns:
+            The same ``regressor`` instance with updated hyperparameters
+            and fitted state.
+
+        Examples:
+            >>> reg = LAKERRegressor(lambda_reg=0.1)
+            >>> reg.fit(x_train, y_train)
+            >>> reg.fit_bilevel(x_train, y_train, x_val, y_val, epochs=30)
+        """
         bilevel = BilevelOptimizer(
             core=self.core,
             lr=lr,
@@ -257,13 +443,53 @@ class EmbeddingTrainer:
     ) -> "LAKERRegressor":
         """Train embeddings with a negative log-likelihood + calibration objective.
 
-        Minimises::
+        Jointly optimises the embedding MLP and predicts well-calibrated
+        uncertainty estimates.  The loss is:
 
-            L = NLL(y | mu, sigma^2) + beta * calibration_penalty
+        .. math::
 
-        where ``mu`` and ``sigma^2`` are the LAKER predictive mean and variance.
-        For the RFF kernel the exact closed-form variance is used; for other
-        kernels a differentiable distance-to-manifold proxy is used.
+            \\mathcal{L} = \\text{NLL}(y \\mid \\mu, \\sigma^2)
+            + \\beta \\,(\\mathbb{E}[r^2] - \\mathbb{E}[\\sigma^2])^2
+
+        where :math:`\\mu` is the LAKER predictive mean, :math:`\\sigma^2`
+        is the predictive variance, and :math:`r = y - \\mu`.  For the RFF
+        kernel the exact closed-form variance is used; for other kernels a
+        differentiable distance-to-manifold proxy is employed.  The variance
+        is computed on a random subset (``variance_subset`` fraction of the
+        training data) as a stochastic approximation.
+
+        After convergence the embeddings are frozen and a final PCG solve is
+        performed on the full training data.
+
+        Args:
+            regressor: The :class:`~laker.models.LAKERRegressor` whose
+                ``embedding_model`` will be optimised.  Must have been
+                fitted at least once.
+            x: Training locations of shape ``(n, d)``.
+            y: Training observations of shape ``(n,)``.
+            lr: Learning rate for the Adam optimiser.
+            epochs: Maximum number of optimisation epochs.
+            beta: Weight of the calibration penalty term.  Higher values
+                enforce tighter calibration between residual variance and
+                predicted variance.
+            variance_subset: Fraction of training points used for the
+                stochastic variance estimate each epoch.
+            patience: Early-stopping patience on the combined loss.
+
+        Returns:
+            The same ``regressor`` instance with updated ``embeddings``,
+            ``alpha``, ``kernel_operator``, and ``preconditioner`` attributes.
+
+        Raises:
+            ValueError: If ``x`` is not 2-D or ``y`` is not 1-D.
+            RuntimeError: If the regressor has no embedding model or no
+                trainable parameters.
+
+        Examples:
+            >>> reg = LAKERRegressor(embedding_dim=16, kernel_approx="rff",
+            ...                      num_features=128)
+            >>> reg.fit(x_train, y_train)
+            >>> reg.fit_uncertainty_aware(x_train, y_train, beta=0.05)
         """
         if x.dim() != 2:
             raise ValueError(f"x must be 2-D, got shape {x.shape}")

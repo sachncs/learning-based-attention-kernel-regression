@@ -1,5 +1,31 @@
 """Attention kernel operators for matrix-free linear algebra.
 
+This module provides a suite of kernel operator classes that support
+matrix-vector products (matvecs) without materialising the full
+``n x n`` kernel matrix.  All operators conform to the
+:class:`KernelOperator` protocol and implement :meth:`matvec`,
+:meth:`diagonal`, :meth:`to_dense`, and :meth:`kernel_eval`.
+
+Approximation strategies, ordered from exact to most compressed:
+
+* :class:`AttentionKernelOperator` — exact ``O(n^2)`` evaluation with
+  optional chunking to bound peak GPU memory.
+* :class:`NystromAttentionKernelOperator` — Nyström low-rank
+  ``O(n m)`` approximation with greedy or leverage-score landmark
+  selection.
+* :class:`RandomFeatureAttentionKernelOperator` — random Fourier
+  feature ``O(n r)`` approximation of the Gaussian kernel.
+* :class:`SparseKNNAttentionKernelOperator` — sparse k-NN graph
+  ``O(n k)`` approximation that retains only the ``k`` largest kernel
+  entries per row.
+* :class:`SKIAttentionKernelOperator` — Structured Kernel
+  Interpolation (SKI) via a product grid and multilinear
+  interpolation weights.
+* :class:`TwoScaleAttentionKernelOperator` — convex combination of
+  a Nyström global component and a sparse k-NN local component.
+* :class:`SpectralAttentionKernelOperator` — learned spectral shaping
+  of the Gram-matrix eigenvalues via a monotone spline.
+
 Includes exact, low-rank (Nyström, RFF), sparse k-NN, SKI, spectral-shaped,
 and two-scale approximations.
 """
@@ -422,12 +448,12 @@ class NystromAttentionKernelOperator:
         ``"leverage"`` (ridge leverage score sampling from a pilot kernel).
         """
         if self.landmark_method == "greedy":
-            return self._select_landmarks_greedy()
+            return self.select_landmarks_greedy()
         if self.landmark_method == "leverage":
-            return self._select_landmarks_leverage()
+            return self.select_landmarks_leverage()
         raise ValueError(f"Unknown landmark_method={self.landmark_method}")
 
-    def _select_landmarks_greedy(self) -> torch.Tensor:
+    def select_landmarks_greedy(self) -> torch.Tensor:
         """Greedy landmark selection (k-means++ style)."""
         indices = torch.zeros(self.m, dtype=torch.long, device=self.device)
         indices[0] = torch.randint(0, self.n, (1,), device=self.device)
@@ -440,7 +466,7 @@ class NystromAttentionKernelOperator:
 
         return indices
 
-    def _select_landmarks_leverage(self) -> torch.Tensor:
+    def select_landmarks_leverage(self) -> torch.Tensor:
         """Ridge leverage score sampling via pilot kernel eigendecomposition."""
         pilot_size = min(self.landmark_pilot_size, self.n)
         if pilot_size == self.n:
@@ -868,18 +894,40 @@ class SparseKNNAttentionKernelOperator:
 def multilinear_weights(
     x: torch.Tensor, grid_1d: list[torch.Tensor]
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """Multilinear interpolation weights for a product grid.
+    r"""Compute multilinear (bilinear/trilinear/...) interpolation weights.
+
+    Given ``d``-dimensional query points ``x`` and a product grid defined
+    by ``d`` sorted 1-D coordinate arrays, this function returns the
+    indices and weights of the ``2^d`` hypercube vertices that enclose
+    each query point.
+
+    The interpolation weight for vertex ``v`` of query point ``i`` is:
+
+    .. math::
+        w_{i,v} = \prod_{j=1}^{d}
+        \begin{cases}
+            1 - f_{i,j} & \text{if bit } j \text{ of } v \text{ is } 0, \\
+            f_{i,j}     & \text{if bit } j \text{ of } v \text{ is } 1,
+        \end{cases}
+
+    where ``f_{i,j}`` is the fractional offset of ``x[i, j]`` between
+    the two enclosing grid points along dimension ``j``.
 
     Args:
-        x: Tensor of shape ``(n, d)`` with coordinates in [0, 1] per dim.
+        x: Tensor of shape ``(n, d)`` with coordinates in ``[0, 1]`` per
+            dimension (after normalisation).
         grid_1d: List of ``d`` tensors, each of shape ``(g_i,)`` with the
-            1-D grid coordinates (sorted ascending).
+            1-D grid coordinates (sorted ascending). All grids should live
+            on ``[0, 1]`` to match the normalised coordinates.
 
     Returns:
-        indices: Long tensor of shape ``(n, num_vertices)`` with grid-point
-            linear indices.
-        weights: Tensor of shape ``(n, num_vertices)`` with interpolation
-            weights (sum to 1 per row).
+        Tuple ``(indices, weights)``:
+
+        * **indices** — Long tensor of shape ``(n, 2^d)`` containing the
+          flat (row-major) linear index of each enclosing vertex in the
+          product grid.
+        * **weights** — Float tensor of shape ``(n, 2^d)`` containing the
+          corresponding interpolation weights. Rows sum to ``1``.
 
     """
     n, d = x.shape
@@ -964,7 +1012,36 @@ class SKIAttentionKernelOperator:
         device: Optional[torch.device] = None,
         dtype: Optional[torch.dtype] = None,
     ) -> None:
-        """Initialise the SKI kernel operator."""
+        """Initialise the SKI kernel operator.
+
+        Constructs the product grid, computes the exact kernel matrix on
+        grid points, and pre-computes the multilinear interpolation
+        weights ``W`` for the training embeddings.  The resulting
+        approximate kernel is ``K ≈ W K_grid W^T``.
+
+        Args:
+            embeddings: Tensor of shape ``(n, embedding_dim)``.
+            lambda_reg: Tikhonov regularisation ``lambda``.
+            grid_size: Maximum number of grid points. The actual grid is a
+                product grid with ``floor(grid_size**(1/d))`` points per
+                dimension, capped so the product does not exceed
+                ``grid_size``.
+            grid_bounds: Optional ``(d, 2)`` tensor with ``[min, max]`` per
+                dimension. If ``None``, inferred from data with 5% padding.
+            device: torch device.
+            dtype: torch dtype.
+
+        Attributes:
+            grid_points_per_dim: Number of grid points along each axis
+                in the product grid. Determined by
+                ``floor(grid_size**(1/embedding_dim))`` and capped so
+                the total product does not exceed ``grid_size``.
+
+        Raises:
+            ValueError: If ``embeddings`` is not 2-D or ``grid_size``
+                is too small for the embedding dimension.
+
+        """
         if embeddings.dim() != 2:
             raise ValueError(f"embeddings must be 2-D, got shape {embeddings.shape}")
         self.n = embeddings.shape[0]
@@ -1222,7 +1299,23 @@ class TwoScaleAttentionKernelOperator:
         device: Optional[torch.device] = None,
         dtype: Optional[torch.dtype] = None,
     ) -> None:
-        """Initialise the spectrum shaper."""
+        """Initialise the two-scale kernel operator.
+
+        Builds the global Nyström and local sparse k-NN sub-operators
+        from the provided embeddings.
+
+        Args:
+            embeddings: Tensor of shape ``(n, embedding_dim)``.
+            lambda_reg: Tikhonov regularisation ``lambda``.
+            alpha: Mixing coefficient in ``[0, 1]`` controlling the
+                global-local trade-off.
+            num_landmarks: Number of landmarks for the Nyström component.
+            k_neighbors: Number of neighbours for the k-NN component.
+            chunk_size: Chunk size passed to both sub-operators.
+            device: torch device.
+            dtype: torch dtype.
+
+        """
         if embeddings.dim() != 2:
             raise ValueError(f"embeddings must be 2-D, got shape {embeddings.shape}")
         self.n = embeddings.shape[0]

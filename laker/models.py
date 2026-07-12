@@ -1,4 +1,38 @@
-"""High-level sklearn-compatible LAKER estimator."""
+"""High-level sklearn-compatible LAKER estimator.
+
+This module provides :class:`LAKERRegressor`, a scikit-learn-compatible
+regressor that wraps the full LAKER pipeline.  It follows the standard
+``fit`` / ``predict`` / ``score`` API and can be used with scikit-learn
+utilities such as :class:`~sklearn.model_selection.GridSearchCV` and
+:class:`~sklearn.pipeline.Pipeline`.
+
+The regressor delegates all heavy computation to
+:class:`~laker.core.LAKERCore` (kernel construction, preconditioning, PCG
+solve) and to specialised helper classes:
+
+* :class:`~laker.training.EmbeddingTrainer` -- end-to-end embedding
+  training, residual correction, bilevel learning, uncertainty-aware
+  training.
+* :class:`~laker.search.HyperparameterSearch` -- grid search and Bayesian
+  optimisation over hyperparameters.
+* :class:`~laker.streaming.StreamingUpdater` -- incremental updates,
+  regularization paths, and continuation methods.
+* :class:`~laker.persistence.ModelPersistence` -- serialisation to disk.
+
+**Quick start**::
+
+    from laker.models import LAKERRegressor
+
+    reg = LAKERRegressor(embedding_dim=16, lambda_reg=0.01)
+    reg.fit(x_train, y_train)
+    y_pred = reg.predict(x_test)
+    print(reg.score(x_test, y_test))   # negative RMSE
+
+**Serialization**::
+
+    reg.save("model.pt")
+    loaded = LAKERRegressor.load("model.pt")
+"""
 
 from __future__ import annotations
 
@@ -27,7 +61,7 @@ class LAKERRegressor:
     Fits the regularised attention kernel regression problem
 
     .. math::
-        \\min_\\alpha \\|G \\alpha - y\\|_2^2 + \\lambda \\alpha^\\top G \\alpha
+        \min_\alpha \|G \alpha - y\|_2^2 + \lambda \alpha^\top G \alpha
 
     where ``G = exp(E E^T)`` is an exponential attention kernel induced by
     learned embeddings ``E``. The linear system ``(lambda I + G) alpha = y``
@@ -35,10 +69,75 @@ class LAKERRegressor:
 
     The estimator follows the ``scikit-learn`` API with ``fit`` and
     ``predict`` methods.
+
+    Args:
+        embedding_dim: Dimensionality of the embedding space.
+        lambda_reg: Regularisation weight :math:`\lambda` in the kernel
+            ridge regression objective.
+        gamma: Kernel bandwidth for the CCCP preconditioner.
+        num_probes: Number of random probe vectors for preconditioner
+            construction.
+        epsilon: Numerical stability constant for the preconditioner.
+        base_rho: Base spectral norm bound for the CCCP preconditioner.
+        cccp_max_iter: Maximum CCCP iterations.
+        cccp_tol: CCCP convergence tolerance.
+        pcg_tol: PCG relative residual tolerance.
+        pcg_max_iter: Maximum PCG iterations.
+        chunk_size: Tile size for chunked kernel evaluations.
+        embedding_module: Optional pre-built ``nn.Module`` embedding network.
+        kernel_approx: Kernel approximation method.  One of ``None`` (exact),
+            ``"nystrom"``, ``"rff"``, ``"knn"``, ``"ski"``, ``"twoscale"``,
+            or ``"spectral"``.
+        num_landmarks: Number of landmarks for Nyström / two-scale kernels.
+        num_features: Number of random Fourier features for RFF kernel.
+        k_neighbors: Number of nearest neighbours for sparse k-NN kernel.
+        grid_size: Grid resolution for SKI kernel.
+        distributed: Whether to use multi-device distributed kernel.
+        twoscale_alpha: Blending weight for the two-scale kernel.
+        landmark_method: Landmark selection strategy (``"greedy"`` or
+            ``"leverage"``).
+        landmark_pilot_size: Pilot size for leverage-score landmarks.
+        spectral_knots: Number of spline knots for spectral kernel.
+        preconditioner: Preconditioner type (``"cccp"`` or ``"adaptive"``).
+        embedding_dtype: Dtype for embedding computation.
+        device: Target PyTorch device.
+        dtype: Target floating-point dtype.
+        verbose: Whether to emit diagnostic log messages.
+        residual_corrector: Optional pre-built residual corrector module.
+
+    Attributes:
+        embeddings: Fitted training embeddings of shape ``(n, D)``, or
+            ``None`` before :meth:`fit`.
+        alpha: Solution vector of shape ``(n,)``, or ``None`` before fit.
+        kernel_operator: The fitted kernel operator, or ``None`` before fit.
+        preconditioner: The learned preconditioner, or ``None`` before fit.
+        embedding_model: The embedding network, or ``None`` before fit.
+        x_train: Training locations stored during :meth:`fit`.
+        y_train: Training targets stored during :meth:`fit`.
+
+    Examples:
+        Basic usage::
+
+            from laker.models import LAKERRegressor
+            reg = LAKERRegressor(embedding_dim=16, lambda_reg=0.01)
+            reg.fit(x_train, y_train)
+            y_pred = reg.predict(x_test)
+
+        With RFF approximation::
+
+            reg = LAKERRegressor(kernel_approx="rff", num_features=128)
+            reg.fit(x_train, y_train)
+            y_pred = reg.predict(x_test)
+            sigma = reg.predict_variance(x_test)
+
+        Serialization::
+
+            reg.save("model.pt")
+            loaded = LAKERRegressor.load("model.pt")
     """
 
-    # Hyperparameters delegated to self._core
-    _HYPERPARAMS = (
+    # Hyperparameters delegated to self.core
+    HYPERPARAMS = (
         "embedding_dim",
         "lambda_reg",
         "gamma",
@@ -99,7 +198,46 @@ class LAKERRegressor:
         verbose: bool = True,
         residual_corrector: Optional[nn.Module] = None,
     ) -> None:
-        """Initialise the LAKER regressor."""
+        """Initialise the LAKER regressor.
+
+        All hyperparameters are validated and forwarded to an internal
+        :class:`~laker.core.LAKERCore` instance.  Helper objects
+        (trainer, search, streaming, persistence) are also created.
+
+        Args:
+            embedding_dim: Dimensionality of the embedding space.
+            lambda_reg: Regularisation weight.
+            gamma: Kernel bandwidth for the CCCP preconditioner.
+            num_probes: Number of probe vectors for the preconditioner.
+            epsilon: Numerical stability constant.
+            base_rho: Base spectral norm bound for CCCP.
+            cccp_max_iter: Maximum CCCP iterations.
+            cccp_tol: CCCP convergence tolerance.
+            pcg_tol: PCG relative residual tolerance.
+            pcg_max_iter: Maximum PCG iterations.
+            chunk_size: Tile size for chunked kernel evaluations.
+            embedding_module: Optional pre-built embedding module.
+            kernel_approx: Kernel approximation method string.
+            num_landmarks: Landmarks for Nyström / two-scale kernels.
+            num_features: Random Fourier features for RFF kernel.
+            k_neighbors: k-NN sparsity for sparse kernel.
+            grid_size: Grid resolution for SKI kernel.
+            distributed: Whether to use multi-device distributed kernel.
+            twoscale_alpha: Blending weight for two-scale kernel.
+            landmark_method: Landmark selection strategy.
+            landmark_pilot_size: Pilot size for leverage-score landmarks.
+            spectral_knots: Number of spline knots for spectral kernel.
+            preconditioner: ``"cccp"`` or ``"adaptive"``.
+            embedding_dtype: Dtype for embedding computation.
+            device: Target PyTorch device.
+            dtype: Target floating-point dtype.
+            verbose: Whether to emit diagnostic log messages.
+            residual_corrector: Optional pre-built residual corrector
+                module.
+
+        Raises:
+            ValueError: If any hyperparameter is out of its valid range.
+        """
         # --- validation (exactly as before) --------------------------------
         if embedding_dim <= 0:
             raise ValueError(f"embedding_dim must be positive, got {embedding_dim}")
@@ -152,7 +290,7 @@ class LAKERRegressor:
         # --- helpers (bypass __setattr__) -----------------------------------
         object.__setattr__(
             self,
-            "_core",
+            "core",
             LAKERCore(
                 embedding_dim=embedding_dim,
                 lambda_reg=lambda_reg,
@@ -183,10 +321,10 @@ class LAKERRegressor:
                 verbose=verbose,
             ),
         )
-        object.__setattr__(self, "_search", HyperparameterSearch(self._core))
-        object.__setattr__(self, "_streaming", StreamingUpdater(self._core))
-        object.__setattr__(self, "_trainer", EmbeddingTrainer(self._core))
-        object.__setattr__(self, "_persistence", ModelPersistence())
+        object.__setattr__(self, "search", HyperparameterSearch(self.core))
+        object.__setattr__(self, "streaming", StreamingUpdater(self.core))
+        object.__setattr__(self, "trainer", EmbeddingTrainer(self.core))
+        object.__setattr__(self, "persistence", ModelPersistence())
 
         # --- fitted state ---------------------------------------------------
         self.embeddings: Optional[torch.Tensor] = None
@@ -203,21 +341,48 @@ class LAKERRegressor:
     # Hyperparameter delegation
     # ------------------------------------------------------------------
     def __getattr__(self, name: str) -> Any:
-        """Delegate hyperparameter access to the core."""
-        if name in self._HYPERPARAMS:
-            return getattr(self._core, name)
+        """Delegate hyperparameter access to the core.
+
+        If ``name`` is one of the registered hyperparameters, the
+        corresponding attribute is read from the internal
+        :class:`~laker.core.LAKERCore` instance.  This ensures that
+        hyperparameters set via ``get_params`` / ``set_params`` are
+        always in sync with the core pipeline.
+
+        Args:
+            name: Attribute name to look up.
+
+        Returns:
+            The value of the hyperparameter from the core.
+
+        Raises:
+            AttributeError: If ``name`` is not a recognised hyperparameter.
+        """
+        if name in self.HYPERPARAMS:
+            return getattr(self.core, name)
         raise AttributeError(f"'{type(self).__name__}' has no attribute '{name}'")
 
     def __setattr__(self, name: str, value: Any) -> None:
-        """Delegate hyperparameter writes to the core."""
-        if name in self._HYPERPARAMS and "_core" in self.__dict__:
+        """Delegate hyperparameter writes to the core.
+
+        When ``name`` is a registered hyperparameter and the core has
+        already been initialised, the value is written directly to the
+        internal :class:`~laker.core.LAKERCore` instance.  String values
+        for ``device``, ``dtype``, and ``embedding_dtype`` are converted
+        to the appropriate ``torch`` types.
+
+        Args:
+            name: Attribute name to set.
+            value: New value for the attribute.
+        """
+        if name in self.HYPERPARAMS and "core" in self.__dict__:
             if name == "device" and isinstance(value, str):
                 value = torch.device(value)
             if name == "dtype" and isinstance(value, str):
                 value = torch.float32 if "float32" in value else torch.float64
             if name == "embedding_dtype" and isinstance(value, str):
                 value = torch.float32 if "float32" in value else torch.float64
-            setattr(self._core, name, value)
+            setattr(self.core, name, value)
         else:
             super().__setattr__(name, value)
 
@@ -231,7 +396,39 @@ class LAKERRegressor:
         x0: Optional[torch.Tensor] = None,
         seed: Optional[int] = None,
     ) -> "LAKERRegressor":
-        """Fit the LAKER model to sparse measurements."""
+        """Fit the LAKER model to sparse measurements.
+
+        Executes the full pipeline:
+
+        1. Compute embeddings :math:`E = f_{\\text{embed}}(X)`.
+        2. Build the attention kernel operator
+           :math:`K = \\exp(E E^\\top) + \\lambda I`.
+        3. Learn the CCCP/adaptive preconditioner.
+        4. Solve :math:`(K + \\lambda I)\\alpha = y` via PCG.
+
+        The fitted state (``embeddings``, ``alpha``, ``kernel_operator``,
+        ``preconditioner``, ``embedding_model``) is stored on the
+        regressor for subsequent calls to :meth:`predict` and
+        :meth:`predict_variance`.
+
+        Args:
+            x: Training locations of shape ``(n, d)``.  Accepts a
+                ``torch.Tensor`` or ``numpy.ndarray``.
+            y: Training observations of shape ``(n,)``.
+            x0: Optional initial guess for the PCG solver.
+            seed: Random seed for reproducibility of the preconditioner.
+
+        Returns:
+            ``self``, to allow method chaining.
+
+        Raises:
+            ValueError: If ``x`` is not 2-D or ``y`` is not 1-D.
+
+        Examples:
+            >>> reg = LAKERRegressor(lambda_reg=0.01)
+            >>> reg.fit(x_train, y_train)
+            >>> reg.predict(x_test)
+        """
         x = to_tensor(x, device=self.device, dtype=self.dtype)
         y = to_tensor(y, device=self.device, dtype=self.dtype).squeeze()
 
@@ -242,17 +439,17 @@ class LAKERRegressor:
 
         self.x_train = x
         self.y_train = y
-        self.embeddings, self.embedding_model = self._core.compute_embeddings(x)
-        kernel_operator = self._core.build_kernel_operator(self.embeddings)
+        self.embeddings, self.embedding_model = self.core.compute_embeddings(x)
+        kernel_operator = self.core.build_kernel_operator(self.embeddings)
         self.kernel_operator = kernel_operator
-        preconditioner = self._core.build_preconditioner(
+        preconditioner = self.core.build_preconditioner(
             kernel_operator.matvec,
             self.embeddings.shape[0],
             seed=seed,
             diagonal=kernel_operator.diagonal(),
         )
         self.preconditioner = preconditioner
-        self.alpha, self.pcg_iterations_ = self._core.solve_pcg(
+        self.alpha, self.pcg_iterations_ = self.core.solve_pcg(
             kernel_operator, preconditioner, y, x0=x0
         )
         return self
@@ -261,7 +458,26 @@ class LAKERRegressor:
         self,
         x: Union[torch.Tensor, "numpy.ndarray"],
     ) -> torch.Tensor:
-        """Reconstruct the radio field at query locations."""
+        """Reconstruct the radio field at query locations.
+
+        Evaluates the kernel interpolation
+        :math:`\\hat{f}(x) = k(x, X)^\\top \\alpha` at each query point,
+        optionally adding the residual corrector output.
+
+        Args:
+            x: Query locations of shape ``(m, d)``.  Accepts a
+                ``torch.Tensor`` or ``numpy.ndarray``.
+
+        Returns:
+            Predicted field values of shape ``(m,)``.
+
+        Raises:
+            RuntimeError: If the model has not been fitted yet.
+            ValueError: If ``x`` is not 2-D.
+
+        Examples:
+            >>> y_pred = reg.predict(x_test)
+        """
         if self.alpha is None or self.embeddings is None:
             raise RuntimeError("Model has not been fitted. Call fit() first.")
 
@@ -269,7 +485,7 @@ class LAKERRegressor:
         if x.dim() != 2:
             raise ValueError(f"x must be 2-D, got shape {x.shape}")
 
-        return self._core.predict(
+        return self.core.predict(
             x,
             self.embedding_model,
             self.embeddings,
@@ -282,7 +498,27 @@ class LAKERRegressor:
         self,
         x: Union[torch.Tensor, "numpy.ndarray"],
     ) -> torch.Tensor:
-        """Predictive variance (uncertainty) at query locations."""
+        """Predictive variance (uncertainty) at query locations.
+
+        Computes the posterior variance
+        :math:`\\sigma^2(x) = k(x,x) - k(x,X)^\\top (K+\\lambda I)^{-1} k(x,X)`
+        for each query point.
+
+        Args:
+            x: Query locations of shape ``(m, d)``.  Accepts a
+                ``torch.Tensor`` or ``numpy.ndarray``.
+
+        Returns:
+            Predictive variance of shape ``(m,)``, clamped to be
+            non-negative.
+
+        Raises:
+            RuntimeError: If the model has not been fitted yet.
+            ValueError: If ``x`` is not 2-D.
+
+        Examples:
+            >>> sigma = reg.predict_variance(x_test)
+        """
         if self.alpha is None or self.embeddings is None:
             raise RuntimeError("Model has not been fitted. Call fit() first.")
 
@@ -290,7 +526,7 @@ class LAKERRegressor:
         if x.dim() != 2:
             raise ValueError(f"x must be 2-D, got shape {x.shape}")
 
-        return self._core.predict_variance(
+        return self.core.predict_variance(
             x,
             self.embedding_model,
             self.embeddings,
@@ -316,7 +552,7 @@ class LAKERRegressor:
         """Fit with validation-based grid search over key hyperparameters."""
         x = to_tensor(x, device=self.device, dtype=self.dtype)
         y = to_tensor(y, device=self.device, dtype=self.dtype).squeeze()
-        return self._search.fit_with_search(
+        return self.search.fit_with_search(
             self,
             x,
             y,
@@ -341,7 +577,7 @@ class LAKERRegressor:
         """Fit with Bayesian Optimisation over key hyperparameters."""
         x = to_tensor(x, device=self.device, dtype=self.dtype)
         y = to_tensor(y, device=self.device, dtype=self.dtype).squeeze()
-        return self._search.fit_with_bo(
+        return self.search.fit_with_bo(
             self,
             x,
             y,
@@ -366,7 +602,7 @@ class LAKERRegressor:
         """Update the model with one or more new observations."""
         x_new = to_tensor(x_new, device=self.device, dtype=self.dtype)
         y_new = to_tensor(y_new, device=self.device, dtype=self.dtype).squeeze()
-        return self._streaming.partial_fit(self, x_new, y_new, forgetting_factor, rebuild_threshold)
+        return self.streaming.partial_fit(self, x_new, y_new, forgetting_factor, rebuild_threshold)
 
     def fit_path(
         self,
@@ -378,7 +614,7 @@ class LAKERRegressor:
         """Fit a regularization path over a sequence of lambda_reg values."""
         x = to_tensor(x, device=self.device, dtype=self.dtype)
         y = to_tensor(y, device=self.device, dtype=self.dtype).squeeze()
-        return self._streaming.fit_path(self, x, y, lambda_reg_grid, reuse_precond)
+        return self.streaming.fit_path(self, x, y, lambda_reg_grid, reuse_precond)
 
     def fit_continuation(
         self,
@@ -392,7 +628,7 @@ class LAKERRegressor:
         """Fit with a continuation schedule over decreasing regularisation."""
         x = to_tensor(x, device=self.device, dtype=self.dtype)
         y = to_tensor(y, device=self.device, dtype=self.dtype).squeeze()
-        return self._streaming.fit_continuation(
+        return self.streaming.fit_continuation(
             self, x, y, lambda_max, lambda_min, n_stages, reuse_precond
         )
 
@@ -411,7 +647,7 @@ class LAKERRegressor:
         """Optimise the embedding MLP weights end-to-end on the regression objective."""
         x = to_tensor(x, device=self.device, dtype=self.dtype)
         y = to_tensor(y, device=self.device, dtype=self.dtype).squeeze()
-        return self._trainer.fit_learned_embeddings(self, x, y, lr, epochs, rebuild_freq, patience)
+        return self.trainer.fit_learned_embeddings(self, x, y, lr, epochs, rebuild_freq, patience)
 
     def fit_residual_corrector(
         self,
@@ -426,7 +662,7 @@ class LAKERRegressor:
         """Train a small residual corrector on ``y - y_hat_laker``."""
         x = to_tensor(x, device=self.device, dtype=self.dtype)
         y = to_tensor(y, device=self.device, dtype=self.dtype).squeeze()
-        return self._trainer.fit_residual_corrector(
+        return self.trainer.fit_residual_corrector(
             self, x, y, val_fraction, epochs, patience, weight_decay, lr
         )
 
@@ -445,7 +681,7 @@ class LAKERRegressor:
         y_train = to_tensor(y_train, device=self.device, dtype=self.dtype).squeeze()
         x_val = to_tensor(x_val, device=self.device, dtype=self.dtype)
         y_val = to_tensor(y_val, device=self.device, dtype=self.dtype).squeeze()
-        return self._trainer.fit_bilevel(self, x_train, y_train, x_val, y_val, lr, epochs, patience)
+        return self.trainer.fit_bilevel(self, x_train, y_train, x_val, y_val, lr, epochs, patience)
 
     def fit_uncertainty_aware(
         self,
@@ -469,7 +705,7 @@ class LAKERRegressor:
         """
         x = to_tensor(x, device=self.device, dtype=self.dtype)
         y = to_tensor(y, device=self.device, dtype=self.dtype).squeeze()
-        return self._trainer.fit_uncertainty_aware(
+        return self.trainer.fit_uncertainty_aware(
             self, x, y, lr, epochs, beta, variance_subset, patience
         )
 
@@ -481,7 +717,19 @@ class LAKERRegressor:
         x: Union[torch.Tensor, "numpy.ndarray"],
         y: Union[torch.Tensor, "numpy.ndarray"],
     ) -> float:
-        """Compute negative RMSE as a sklearn-style score."""
+        """Compute negative RMSE as a sklearn-style score.
+
+        Higher is better (consistent with the scikit-learn convention
+        where ``score`` returns a quantity to be maximised).
+
+        Args:
+            x: Evaluation locations of shape ``(m, d)``.
+            y: True observations of shape ``(m,)``.
+
+        Returns:
+            The negative root mean squared error, i.e.
+            :math:`-\\sqrt{\\frac{1}{m}\\|\\hat{y} - y\\|_2^2}`.
+        """
         y_pred = self.predict(x)
         y_true = to_tensor(y, device=self.device, dtype=self.dtype).squeeze()
         rmse = torch.sqrt(torch.mean((y_pred - y_true) ** 2)).item()
@@ -492,7 +740,24 @@ class LAKERRegressor:
         x: Union[torch.Tensor, "numpy.ndarray"],
         y: Union[torch.Tensor, "numpy.ndarray"],
     ) -> float:
-        """Compute the coefficient of determination R^2."""
+        """Compute the coefficient of determination R^2.
+
+        .. math::
+
+            R^2 = 1 - \\frac{\\sum_i (y_i - \\hat{y}_i)^2}
+                        {\\sum_i (y_i - \\bar{y})^2}
+
+        Returns ``1.0`` for a perfect fit, ``0.0`` when the model always
+        predicts the mean, and negative values when the model is worse
+        than the mean.
+
+        Args:
+            x: Evaluation locations of shape ``(m, d)``.
+            y: True observations of shape ``(m,)``.
+
+        Returns:
+            The :math:`R^2` score as a float.
+        """
         y_pred = self.predict(x)
         y_true = to_tensor(y, device=self.device, dtype=self.dtype).squeeze()
         ss_res = torch.sum((y_true - y_pred) ** 2).item()
@@ -505,13 +770,27 @@ class LAKERRegressor:
         """Return the condition number of the preconditioned system."""
         if self.preconditioner is None or self.kernel_operator is None:
             raise RuntimeError("Model has not been fitted.")
-        return self._core.condition_number(self.kernel_operator, self.preconditioner)
+        return self.core.condition_number(self.kernel_operator, self.preconditioner)
 
     # ------------------------------------------------------------------
     # Sklearn compatibility
     # ------------------------------------------------------------------
     def get_params(self, deep: bool = True) -> dict:
-        """Return estimator parameters for sklearn compatibility."""
+        """Return estimator parameters for sklearn compatibility.
+
+        Returns a dictionary of all hyperparameters that can be passed
+        to the constructor.  This method is required for compatibility
+        with scikit-learn's cross-validation and model-selection
+        utilities.
+
+        Args:
+            deep: If ``True``, also returns the parameters of contained
+                sub-objects (currently unused but accepted for API
+                compatibility).
+
+        Returns:
+            Dictionary mapping parameter names to their values.
+        """
         return {
             "embedding_dim": self.embedding_dim,
             "lambda_reg": self.lambda_reg,
@@ -545,7 +824,21 @@ class LAKERRegressor:
         }
 
     def set_params(self, **params) -> "LAKERRegressor":
-        """Set estimator parameters for sklearn compatibility."""
+        """Set estimator parameters for sklearn compatibility.
+
+        Updates one or more hyperparameters by name.  This method is
+        required for compatibility with scikit-learn's cross-validation
+        and model-selection utilities.
+
+        Args:
+            **params: Hyperparameter names and their new values.
+
+        Returns:
+            ``self``, to allow method chaining.
+
+        Raises:
+            ValueError: If an unrecognized parameter name is provided.
+        """
         for key, value in params.items():
             if not hasattr(self, key):
                 raise ValueError(f"Invalid parameter {key!r} for LAKERRegressor")
@@ -556,10 +849,36 @@ class LAKERRegressor:
     # Persistence
     # ------------------------------------------------------------------
     def save(self, path: str) -> None:
-        """Serialize the fitted model to disk."""
-        self._persistence.save(self, path)
+        """Serialize the fitted model to disk.
+
+        Delegates to :meth:`ModelPersistence.save`.  The model must be
+        fitted before saving.
+
+        Args:
+            path: Filesystem path where the model will be saved.
+                Overwrites any existing file at this location.
+
+        Raises:
+            RuntimeError: If the model has not been fitted.
+        """
+        self.persistence.save(self, path)
 
     @classmethod
     def load(cls, path: str) -> "LAKERRegressor":
-        """Deserialize a model from disk."""
+        """Deserialize a model from disk.
+
+        Delegates to :meth:`ModelPersistence.load`.  Returns a fully
+        reconstructed ``LAKERRegressor`` with all hyperparameters, fitted
+        tensors, embedding model, and residual corrector restored.
+
+        Args:
+            path: Filesystem path to the serialized model file.
+
+        Returns:
+            A new :class:`LAKERRegressor` instance ready for prediction.
+
+        Examples:
+            >>> reg = LAKERRegressor.load("model.pt")
+            >>> reg.predict(x_test)
+        """
         return ModelPersistence.load(path)

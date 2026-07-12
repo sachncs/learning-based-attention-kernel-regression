@@ -10,10 +10,25 @@ logger = logging.getLogger(__name__)
 
 
 class Visualizer:
-    """High-level visualiser for LAKER regression outputs and diagnostics."""
+    """High-level visualiser for LAKER regression outputs and diagnostics.
+
+    Provides methods for plotting 2-D radio maps and convergence curves.
+    All plot methods accept a ``figsize`` parameter that controls the
+    figure dimensions in inches.
+
+    Args:
+        figsize: Default figure size ``(width, height)`` in inches for all
+            plots created by this visualiser.  Can be overridden per-call
+            in methods like :meth:`plot_convergence`.
+    """
 
     def __init__(self, figsize: Tuple[int, int] = (6, 5)):
-        """Initialise the visualiser."""
+        """Initialise the visualiser.
+
+        Args:
+            figsize: Default figure size ``(width, height)`` in inches.
+                Used for all plots unless overridden per-call.
+        """
         self.figsize = figsize
 
     def radio_map_to_image(
@@ -28,6 +43,11 @@ class Visualizer:
             predictions: Flat tensor of shape ``(grid_size**2,)``.
             grid_size: Number of points along each spatial axis.
             extent: ``(x_min, x_max, y_min, y_max)`` for axis labels.
+                This value should match the spatial bounds used in
+                :func:`~laker.data.generate_grid` (or equivalent grid
+                generation) so that the image axes are correctly aligned
+                with the physical coordinates.  If ``None``, no extent
+                metadata is attached.
 
         Returns:
             2-D NumPy array of shape ``(grid_size, grid_size)``.
@@ -52,7 +72,12 @@ class Visualizer:
             predictions: Flat tensor of shape ``(grid_size**2,)``.
             grid_size: Number of points along each spatial axis.
             title: Plot title.
-            extent: ``(x_min, x_max, y_min, y_max)``.
+            extent: ``(x_min, x_max, y_min, y_max)``.  This value should
+                match the spatial bounds used in
+                :func:`~laker.data.generate_grid` so that the plot axes
+                are correctly aligned with the physical coordinates of
+                the training and query data.  Pass ``None`` to use
+                default pixel coordinates.
             colorbar_label: Label for the colorbar.
             vmin: Minimum value for the colormap.
             vmax: Maximum value for the colormap.
@@ -147,6 +172,10 @@ def radio_map_to_image(
         predictions: Flat tensor of shape ``(grid_size**2,)``.
         grid_size: Number of points along each spatial axis.
         extent: ``(x_min, x_max, y_min, y_max)`` for axis labels.
+            This value should match the spatial bounds used in
+            :func:`~laker.data.generate_grid` (or equivalent grid
+            generation) so that the image axes are correctly aligned
+            with the physical coordinates.
 
     Returns:
         2-D NumPy array of shape ``(grid_size, grid_size)``.
@@ -174,7 +203,11 @@ def plot_radio_map(
         predictions: Flat tensor of shape ``(grid_size**2,)``.
         grid_size: Number of points along each spatial axis.
         title: Plot title.
-        extent: ``(x_min, x_max, y_min, y_max)``.
+        extent: ``(x_min, x_max, y_min, y_max)``.  This value should
+            match the spatial bounds used in
+            :func:`~laker.data.generate_grid` so that the plot axes
+            are correctly aligned with the physical coordinates of
+            the training and query data.
         colorbar_label: Label for the colorbar.
         figsize: Figure size in inches.
         vmin: Minimum value for the colormap.

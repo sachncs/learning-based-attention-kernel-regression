@@ -1,4 +1,31 @@
-"""Bilevel hyperparameter learning via implicit differentiation."""
+"""Bilevel hyperparameter learning via implicit differentiation.
+
+Bilevel optimisation treats hyperparameter selection as a nested
+optimisation problem:
+
+* **Inner problem.** Given hyperparameters :math:`\\theta` (e.g.
+  regularisation strength :math:`\\lambda`, embedding weights), solve
+  the kernel regression system
+
+  .. math::
+      (K(\\theta) + \\lambda I) \\alpha = y
+
+  via preconditioned conjugate gradient (PCG).
+
+* **Outer problem.** Minimise a validation loss
+  :math:`\\mathcal{L}_{\\mathrm{val}}(\\alpha(\\theta))` with respect
+  to :math:`\\theta` using an Adam optimiser.
+
+Gradients of the outer loss with respect to :math:`\\theta` are
+computed by :mod:`laker.implicit_diff`, which implements the adjoint
+method: one additional PCG solve for the adjoint vector, followed by
+cheap per-parameter dot products.  This avoids differentiating through
+every CG iteration, which would be prohibitively expensive.
+
+The :class:`BilevelOptimizer` class orchestrates this outer loop,
+alternating between the inner PCG solve, outer loss evaluation, and
+hypergradient computation until convergence or early stopping.
+"""
 
 from __future__ import annotations
 
@@ -20,10 +47,31 @@ logger = logging.getLogger(__name__)
 class BilevelOptimizer:
     """Outer-loop Adam optimizer over hyperparameters with inner PCG solve.
 
-    The inner problem solves ``(K(theta) + lambda I) alpha = y`` via PCG.
-    The outer problem minimises validation loss w.r.t. ``theta`` (e.g.
-    ``lambda_reg``, embedding weights) using hypergradients computed by
-    implicit differentiation through the fixed-point.
+    The inner problem solves :math:`(K(\\theta) + \\lambda I) \\alpha = y`
+    via preconditioned conjugate gradient (PCG), where :math:`K(\\theta)`
+    is a kernel operator whose construction depends on learnable
+    hyperparameters :math:`\\theta`.
+
+    The outer problem minimises validation mean-squared error with respect
+    to :math:`\\theta` using Adam. Hypergradients are computed by the
+    adjoint method (:mod:`laker.implicit_diff`), which requires only one
+    additional PCG solve per outer iteration.
+
+    By default the only learnable hyperparameter is a logit for the
+    regularisation strength :math:`\\lambda`, but custom parameter lists
+    (e.g. embedding-network weights) can be supplied.
+
+    Args:
+        core: The :class:`LAKERCore` instance providing kernel-operator
+            construction, preconditioner building, and PCG solving.
+        lr: Learning rate for the outer Adam optimiser.
+        epochs: Maximum number of outer iterations.
+        patience: Early-stopping patience (number of outer iterations
+            without validation-loss improvement before stopping).
+        pcg_tol: Tolerance forwarded to the inner PCG solve.
+        pcg_max_iter: Maximum iterations forwarded to the inner PCG solve.
+        verbose: Whether to log progress.
+
     """
 
     def __init__(
@@ -36,7 +84,22 @@ class BilevelOptimizer:
         pcg_max_iter: int = 500,
         verbose: bool = True,
     ) -> None:
-        """Initialise the bilevel optimiser."""
+        """Initialise the bilevel optimiser.
+
+        Args:
+            core: :class:`LAKERCore` instance that provides
+                :meth:`compute_embeddings`, :meth:`build_kernel_operator`,
+                :meth:`build_preconditioner`, and :meth:`solve_pcg`.
+            lr: Adam learning rate for the outer optimisation loop.
+            epochs: Maximum number of outer iterations.
+            patience: Early-stopping patience. Training stops if the
+                validation loss has not improved for this many
+                consecutive iterations.
+            pcg_tol: Relative tolerance for the inner PCG solve.
+            pcg_max_iter: Maximum PCG iterations for the inner solve.
+            verbose: Whether to log per-epoch progress.
+
+        """
         self.core = core
         self.lr = lr
         self.epochs = epochs
@@ -56,17 +119,34 @@ class BilevelOptimizer:
     ) -> "LAKERRegressor":
         """Optimise hyperparameters via bilevel learning.
 
+        Performs the full outer loop:
+
+        1. Compute embeddings and build the kernel operator from
+           ``x_train``.
+        2. Solve the inner PCG system for :math:`\\alpha`.
+        3. Evaluate the validation MSE on ``x_val`` / ``y_val``.
+        4. Compute hypergradients via the adjoint method.
+        5. Update hyperparameters with Adam.
+        6. Repeat until convergence or early stopping, then refit the
+           model on the full training set with the best hyperparameters.
+
         Args:
-            regressor: The LAKER model to train.
-            x_train: Training locations ``(n_train, dx)``.
-            y_train: Training targets ``(n_train,)``.
-            x_val: Validation locations ``(n_val, dx)``.
-            y_val: Validation targets ``(n_val,)``.
-            hyperparameters: List of tensors to optimise. If ``None``, defaults
-                to ``[lambda_reg_logit]`` (a learned logit for ``lambda_reg``).
+            regressor: The :class:`LAKERRegressor` to train. Its
+                :meth:`fit` method is called at the end with the full
+                training data.
+            x_train: Training input locations of shape ``(n_train, dx)``.
+            y_train: Training targets of shape ``(n_train,)``.
+            x_val: Validation input locations of shape ``(n_val, dx)``.
+            y_val: Validation targets of shape ``(n_val,)``.
+            hyperparameters: List of tensors to optimise in the outer
+                loop. If ``None``, defaults to a single learnable logit
+                for ``regressor.lambda_reg``.
 
         Returns:
-            ``self`` for method chaining.
+            The fitted ``regressor`` (after a final refit on all data).
+
+        Raises:
+            ValueError: If input tensors have incorrect dimensionality.
 
         """
         if x_train.dim() != 2:

@@ -1,4 +1,39 @@
-"""Preconditioner learning via shrinkage-regularised CCCP."""
+"""Preconditioner learning via shrinkage-regularised CCCP.
+
+This module implements data-dependent preconditioners for the Tikhonov-regularised
+attention kernel system :math:`(\\lambda I + G) \\alpha = y`, where
+:math:`G = \\exp(E E^\\top)` is the exponential attention kernel and
+:math:`\\lambda` is the regularisation parameter.
+
+The core preconditioner (:class:`CCCPPreconditioner`) learns
+:math:`P = \\Sigma^{-1/2}` where :math:`\\Sigma` is a covariance matrix
+estimated from the operator applied to random probe vectors. The
+estimation proceeds via the Convex-Concave Procedure (CCCP) applied to the
+regularised maximum-likelihood problem from Algorithm 1 of the LAKER paper.
+
+**Factored form.** For scalability, :math:`\\Sigma` is never materialised
+as an :math:`n \\times n` matrix. Instead it is maintained in the factored
+representation
+
+.. math::
+    \\Sigma = c_\\mathrm{iso} I + Q B Q^\\top
+
+where :math:`Q \\in \\mathbb{R}^{n \\times N_r}` is an orthonormal basis
+spanning the (normalised) operator-applied probes, :math:`B \\in
+\\mathbb{R}^{N_r \\times N_r}` is a small dense matrix, and
+:math:`c_\\mathrm{iso}` is an isotropic scalar coefficient. This reduces
+the per-iteration cost from :math:`O(n^3)` to :math:`O(N_r^3)`.
+
+**Adaptive selection.** The :class:`AdaptivePreconditioner` wrapper runs
+cheap diagnostics (power iteration + Rayleigh quotients on random probes)
+to estimate the condition number :math:`\\kappa` of the operator and
+selects an appropriate strategy:
+
+* :math:`\\kappa < 10^3` — Jacobi (diagonal) preconditioner (cheapest).
+* :math:`10^3 \\le \\kappa < 10^6` — standard CCCP preconditioner.
+* :math:`\\kappa \\ge 10^6` — CCCP with doubled probe budget for
+  improved spectral coverage.
+"""
 
 import logging
 from typing import TYPE_CHECKING, Callable, Optional, Union
@@ -349,20 +384,33 @@ class AdaptivePreconditioner:
 
     Runs a small number of random probes to estimate the condition number of
     the operator via power iteration, then chooses:
-    - ``JacobiPreconditioner`` if ``κ < 1e3`` (fast, well-conditioned).
-    - ``CCCPPreconditioner`` if ``κ < 1e6`` (robust, moderate conditioning).
-    - ``CCCPPreconditioner`` with increased probes if ``κ >= 1e6``.
+
+    * ``JacobiPreconditioner`` if ``kappa < 1e3`` (fast, well-conditioned).
+    * ``CCCPPreconditioner`` if ``kappa < 1e6`` (robust, moderate conditioning).
+    * ``CCCPPreconditioner`` with doubled probes if ``kappa >= 1e6`` (aggressive
+      spectral coverage for ill-conditioned problems).
+
+    This wrapper is designed to be a drop-in replacement for any single
+    preconditioner: it exposes the same :meth:`build` / :meth:`apply` interface
+    but internally delegates to whichever strategy the diagnostic phase
+    selects.
 
     Args:
-        gamma: CCCP regularisation parameter.
-        num_probes: Base number of random directions for CCCP.
-        epsilon: Numerical safeguard.
-        base_rho: Base shrinkage parameter.
+        gamma: CCCP regularisation parameter forwarded to
+            :class:`CCCPPreconditioner`.
+        num_probes: Base number of random directions for CCCP. For the
+            aggressive branch this value is doubled.
+        epsilon: Numerical safeguard for eigendecomposition clamping.
+        base_rho: Base shrinkage parameter when ``N_r >= n``.
         max_iter: Maximum CCCP iterations.
-        tol: CCCP convergence tolerance.
-        verbose: Whether to log progress.
+        tol: CCCP convergence tolerance on relative parameter change.
+        verbose: Whether to log diagnostics and selection decisions.
         device: torch device.
         dtype: torch dtype.
+        probe_strategy: Probe strategy forwarded to :class:`CCCPPreconditioner`
+            (``"gaussian"`` or ``"power_iter"``).
+        power_iter_steps: Number of power-iteration steps when using the
+            ``"power_iter"`` probe strategy.
 
     """
 
@@ -380,7 +428,26 @@ class AdaptivePreconditioner:
         probe_strategy: str = "gaussian",
         power_iter_steps: int = 3,
     ) -> None:
-        """Initialise the adaptive preconditioner."""
+        """Initialise the adaptive preconditioner.
+
+        Args:
+            gamma: CCCP regularisation parameter forwarded to
+                :class:`CCCPPreconditioner`.
+            num_probes: Base number of random directions. If ``None``,
+                an adaptive heuristic ``max(200, int(2 * sqrt(n)))``
+                is used at build time.
+            epsilon: Numerical safeguard for eigenvalue clamping.
+            base_rho: Base shrinkage when ``N_r >= n``.
+            max_iter: Maximum CCCP iterations.
+            tol: Convergence tolerance on relative parameter change.
+            verbose: Whether to log selection decisions.
+            device: torch device.
+            dtype: torch dtype.
+            probe_strategy: ``"gaussian"`` (default) or ``"power_iter"``.
+            power_iter_steps: Power-iteration steps for the ``"power_iter"``
+                strategy.
+
+        """
         self.gamma = float(gamma)
         self.num_probes = num_probes
         self.epsilon = float(epsilon)
@@ -396,8 +463,8 @@ class AdaptivePreconditioner:
             dtype = get_default_dtype()
         self.device = device
         self.dtype = dtype
-        self._inner: Optional[Union["JacobiPreconditioner", CCCPPreconditioner]] = None
-        self._inner_name: Optional[str] = None
+        self.inner: Optional[Union["JacobiPreconditioner", CCCPPreconditioner]] = None
+        self.inner_name: Optional[str] = None
 
     def build(
         self,
@@ -406,7 +473,30 @@ class AdaptivePreconditioner:
         diagonal: Optional[torch.Tensor] = None,
         seed: Optional[int] = None,
     ) -> "AdaptivePreconditioner":
-        """Run diagnostics and select a preconditioner."""
+        """Run diagnostics and select a preconditioner.
+
+        Generates up to ``min(10, n)`` random probe vectors, applies the
+        operator, and estimates the condition number via power iteration
+        (largest eigenvalue) and Rayleigh quotients (smallest eigenvalue).
+        Based on the estimated :math:`\\kappa`, one of three strategies
+        is selected as described in the class docstring.
+
+        Args:
+            operator: Callable that applies :math:`(\\lambda I + G)` to a
+                vector or batch of vectors.
+            n: Problem dimension.
+            diagonal: Optional diagonal of the operator. Required for
+                Jacobi preconditioner selection.
+            seed: Optional random seed for reproducibility.
+
+        Returns:
+            ``self`` for method chaining.
+
+        Raises:
+            RuntimeError: If the preconditioner has not been built (propagated
+                from the inner preconditioner).
+
+        """
         num_diag_probes = min(10, n)
         gen = torch.Generator(device=self.device)
         if seed is not None:
@@ -436,8 +526,8 @@ class AdaptivePreconditioner:
         if cond < 1e3 and diagonal is not None:
             from laker.solvers import JacobiPreconditioner
 
-            self._inner = JacobiPreconditioner(diagonal)
-            self._inner_name = "jacobi"
+            self.inner = JacobiPreconditioner(diagonal)
+            self.inner_name = "jacobi"
             if self.verbose:
                 logger.info("AdaptivePreconditioner selected Jacobi (κ≈%.2e)", cond)
         elif cond < 1e6:
@@ -455,8 +545,8 @@ class AdaptivePreconditioner:
                 power_iter_steps=self.power_iter_steps,
             )
             cccp.build(operator, n, seed=seed)
-            self._inner = cccp
-            self._inner_name = "cccp"
+            self.inner = cccp
+            self.inner_name = "cccp"
             if self.verbose:
                 logger.info("AdaptivePreconditioner selected CCCP (κ≈%.2e)", cond)
         else:
@@ -477,8 +567,8 @@ class AdaptivePreconditioner:
                 power_iter_steps=self.power_iter_steps,
             )
             cccp.build(operator, n, seed=seed)
-            self._inner = cccp
-            self._inner_name = "cccp_aggressive"
+            self.inner = cccp
+            self.inner_name = "cccp_aggressive"
             if self.verbose:
                 logger.info(
                     "AdaptivePreconditioner selected aggressive CCCP (κ≈%.2e)",
@@ -487,9 +577,23 @@ class AdaptivePreconditioner:
         return self
 
     def apply(self, x: torch.Tensor) -> torch.Tensor:
-        """Apply the selected preconditioner."""
-        if self._inner is None:
+        """Apply the selected preconditioner to vector(s).
+
+        Delegates to the internally selected preconditioner's
+        :meth:`apply` method (either Jacobi or CCCP).
+
+        Args:
+            x: Tensor of shape ``(n,)`` or ``(n, k)``.
+
+        Returns:
+            Tensor of the same shape as ``x`` after preconditioning.
+
+        Raises:
+            RuntimeError: If :meth:`build` has not been called.
+
+        """
+        if self.inner is None:
             raise RuntimeError("Preconditioner has not been built. Call build() first.")
-        if self._inner_name == "jacobi":
-            return self._inner.apply(x)
-        return self._inner.apply(x)
+        if self.inner_name == "jacobi":
+            return self.inner.apply(x)
+        return self.inner.apply(x)
