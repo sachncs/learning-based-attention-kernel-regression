@@ -19,7 +19,7 @@ Usage::
 
     executor = BenchmarkExecutor(warmup=20, trials=50)
     result = executor.run("my_bench", my_operation)
-    print(result["mean_ms"])
+    # result["mean_ms"] contains the mean benchmark time in milliseconds
 """
 
 import logging

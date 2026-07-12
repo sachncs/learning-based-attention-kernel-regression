@@ -26,7 +26,7 @@ solve) and to specialised helper classes:
     reg = LAKERRegressor(embedding_dim=16, lambda_reg=0.01)
     reg.fit(x_train, y_train)
     y_pred = reg.predict(x_test)
-    print(reg.score(x_test, y_test))   # negative RMSE
+    # reg.score(x_test, y_test) returns negative RMSE
 
 **Serialization**::
 
