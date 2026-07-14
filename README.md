@@ -4,9 +4,9 @@
   <p align="center">
     <a href="#installation"><img src="https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue" alt="Python"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
-    <a href="https://github.com/sachn-cs/laker/actions"><img src="https://img.shields.io/github/actions/workflow/status/sachn-cs/laker/ci.yml?branch=master" alt="CI"></a>
+    <a href="https://github.com/sachncs/laker/actions"><img src="https://img.shields.io/github/actions/workflow/status/sachncs/laker/ci.yml?branch=master" alt="CI"></a>
     <a href="https://pypi.org/project/laker/"><img src="https://img.shields.io/pypi/v/laker" alt="PyPI"></a>
-    <a href="https://github.com/sachn-cs/laker/stargazers"><img src="https://img.shields.io/github/stars/sachn-cs/laker" alt="Stars"></a>
+    <a href="https://github.com/sachncs/laker/stargazers"><img src="https://img.shields.io/github/stars/sachncs/laker" alt="Stars"></a>
   </p>
 </p>
 
@@ -65,7 +65,7 @@ pip install laker
 ### From source
 
 ```bash
-git clone https://github.com/sachn-cs/laker.git
+git clone https://github.com/sachncs/laker.git
 cd laker
 pip install -e .
 ```

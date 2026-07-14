@@ -11,7 +11,7 @@
 Install from source in editable mode with development dependencies:
 
 ```bash
-git clone https://github.com/sachn-cs/laker.git
+git clone https://github.com/sachncs/laker.git
 cd laker
 pip install -e ".[dev]"
 ```

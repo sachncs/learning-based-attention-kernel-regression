@@ -121,7 +121,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Comprehensive test suite with 14+ tests.
 - Documentation and usage examples.
 
-[Unreleased]: https://github.com/sachn-cs/laker/compare/v0.4.0...HEAD
-[0.4.0]: https://github.com/sachn-cs/laker/compare/v0.3.0...v0.4.0
-[0.3.0]: https://github.com/sachn-cs/laker/compare/v0.0.1...v0.3.0
-[0.0.1]: https://github.com/sachn-cs/laker/releases/tag/v0.0.1
+[Unreleased]: https://github.com/sachncs/laker/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/sachncs/laker/compare/v0.3.0...v0.4.0
+[0.3.0]: https://github.com/sachncs/laker/compare/v0.0.1...v0.3.0
+[0.0.1]: https://github.com/sachncs/laker/releases/tag/v0.0.1
