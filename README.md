@@ -4,9 +4,9 @@
   <p align="center">
     <a href="#installation"><img src="https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12%20%7C%203.13-blue" alt="Python"></a>
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="License"></a>
-    <a href="https://github.com/sachn-cs/laker/actions"><img src="https://img.shields.io/github/actions/workflow/status/sachn-cs/laker/ci.yml?branch=master" alt="CI"></a>
+    <a href="https://github.com/sachncs/laker/actions"><img src="https://img.shields.io/github/actions/workflow/status/sachncs/laker/ci.yml?branch=master" alt="CI"></a>
     <a href="https://pypi.org/project/laker/"><img src="https://img.shields.io/pypi/v/laker" alt="PyPI"></a>
-    <a href="https://github.com/sachn-cs/laker/stargazers"><img src="https://img.shields.io/github/stars/sachn-cs/laker" alt="Stars"></a>
+    <a href="https://github.com/sachncs/laker/stargazers"><img src="https://img.shields.io/github/stars/sachncs/laker" alt="Stars"></a>
   </p>
 </p>
 
@@ -56,7 +56,7 @@ to three orders of magnitude.
 
 ## Installation
 
-### From PyPI (when published)
+### From PyPI
 
 ```bash
 pip install laker
@@ -65,7 +65,7 @@ pip install laker
 ### From source
 
 ```bash
-git clone https://github.com/sachn-cs/laker.git
+git clone https://github.com/sachncs/laker.git
 cd laker
 pip install -e .
 ```
@@ -87,6 +87,13 @@ pip install -e ".[viz]"
 ---
 
 ## Quick Start
+
+### CLI
+
+```bash
+laker fit --locations x_train.pt --measurements y_train.pt --output model.pt
+laker predict --model model.pt --locations x_test.pt --output y_pred.pt
+```
 
 ### Python API
 
@@ -111,30 +118,23 @@ y_pred = model.predict(x_test)
 print(f"R^2 score: {model.score(x_test, y_test):.4f}")
 ```
 
-### CLI
-
-```bash
-laker fit --locations x_train.pt --measurements y_train.pt --output model.pt
-laker predict --model model.pt --locations x_test.pt --output y_pred.pt
-```
-
 ---
 
 ## Configuration
 
 ### Core Parameters
 
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `embedding_dim` | 10 | Dimension of the embedding space |
-| `lambda_reg` | 1e-2 | Ridge regularization weight |
-| `gamma` | 0.1 | Kernel bandwidth for CCCP preconditioner |
-| `num_probes` | `None` | Random probe vectors for preconditioner |
-| `pcg_tol` | 1e-6 | PCG relative residual tolerance |
-| `pcg_max_iter` | 1000 | Maximum PCG iterations |
-| `cccp_max_iter` | 200 | Maximum CCCP iterations |
-| `device` | `None` | PyTorch device (`"cpu"`, `"cuda"`, `"mps"`) |
-| `dtype` | `float32` | Floating-point dtype for the solver |
+| Parameter | Env Variable | Default | Description |
+|-----------|--------------|---------|-------------|
+| `embedding_dim` | — | 10 | Dimension of the embedding space |
+| `lambda_reg` | — | 1e-2 | Ridge regularization weight |
+| `gamma` | — | 0.1 | Kernel bandwidth for CCCP preconditioner |
+| `num_probes` | — | `None` | Random probe vectors for preconditioner |
+| `pcg_tol` | — | 1e-6 | PCG relative residual tolerance |
+| `pcg_max_iter` | — | 1000 | Maximum PCG iterations |
+| `cccp_max_iter` | — | 200 | Maximum CCCP iterations |
+| `device` | — | `None` | PyTorch device (`"cpu"`, `"cuda"`, `"mps"`) |
+| `dtype` | — | `float32` | Floating-point dtype for the solver |
 
 ### Kernel Approximation
 
@@ -168,6 +168,41 @@ laker predict --model model.pt --locations x_test.pt --output y_pred.pt
 | `beta` | 0.1 | Calibration penalty weight (uncertainty-aware) |
 
 See [docs/](docs/) for detailed configuration options.
+
+---
+
+## API
+
+| Symbol | Type | Description |
+|--------|------|-------------|
+| `LAKERRegressor` | class | sklearn-compatible estimator (`fit`/`predict`/`score`) |
+| `PositionEmbedding` | class | Embedding module (random Fourier features + MLP) |
+| `SearchService` | class | Grid and Bayesian hyperparameter search |
+| `StreamingService` | class | `partial_fit` with warm-start and rebuild |
+| `ResidualCorrector` | class | Small MLP for local misspecification |
+| `DistributedMatvec` | class | Multi-GPU sharded matrix-free matvec |
+| `BilevelLearner` | class | Implicit-differentiation bilevel optimiser |
+| `save` / `load` | function | Model serialisation to / from disk |
+
+---
+
+## Examples
+
+The package ships with end-to-end worked examples under [`examples/`](examples/):
+
+```bash
+# Reconstruct a synthetic radio field
+python examples/radio_field.py --n 2000 --embedding-dim 10
+
+# Run the bilevel lambda / embedding optimization
+python examples/bilevel.py --epochs 50 --lr 1e-3
+
+# Distributed multi-GPU matvec sanity check
+python examples/distributed_matvec.py --devices 0,1
+```
+
+A full reproduction of the paper's Table 5 fit lives in
+[`benchmarks/reproducible.py`](benchmarks/reproducible.py).
 
 ---
 
@@ -266,6 +301,31 @@ chore: update ruff config
 
 ---
 
+## Testing
+
+```bash
+pytest tests/ -v
+pytest tests/ --cov=laker
+```
+
+---
+
+## Build
+
+```bash
+python -m build
+```
+
+---
+
+## Release
+
+See [docs/release.md](docs/release.md) — version is bumped in `pyproject.toml`,
+the changelog updated, a `vX.Y.Z` tag is cut, and the PyPI publishing workflow
+publishes the source and wheel distributions.
+
+---
+
 ## Tech Stack
 
 | Category | Technology |
@@ -312,29 +372,22 @@ reduction**.
 | knn | 4.31 | 1.6x |
 | ski | 60.41 | 0.11x |
 
----
+### How It Works
 
-## How It Works
+**Adaptive Tiling** — For `n <= chunk_size` or when a single chunk against the
+full input fits in a 64 MB budget, we use 1-D chunking (fastest path).
+Otherwise we tile over both the output and reduction dimensions, keeping peak
+memory bounded.
 
-### Adaptive Tiling
+**Factored Preconditioner** — The learned covariance `Sigma` is maintained as
+`a*I + Q*C*Q^T` where `Q` is an orthonormal basis for the random-probe span.
+This reduces each CCCP iteration to `O(N_r^3)` instead of `O(n^3)`.
 
-For `n <= chunk_size` or when a single chunk against the full input fits in a
-64 MB budget, we use 1-D chunking (fastest path). Otherwise we tile over both
-the output and reduction dimensions, keeping peak memory bounded.
-
-### Factored Preconditioner
-
-The learned covariance `Sigma` is maintained as `a*I + Q*C*Q^T` where `Q` is an
-orthonormal basis for the random-probe span. This reduces each CCCP iteration
-to `O(N_r^3)` instead of `O(n^3)`.
-
-### PCG Solver
-
-The solver uses standard preconditioned conjugate gradient with explicit
-breakdown detection (`p^T A p <= 0`). Optional residual replacement
-(`restart_freq`) can suppress round-off drift in very long float64 runs, but it
-is **disabled by default** because it causes catastrophic cancellation in
-float32.
+**PCG Solver** — The solver uses standard preconditioned conjugate gradient
+with explicit breakdown detection (`p^T A p <= 0`). Optional residual
+replacement (`restart_freq`) can suppress round-off drift in very long float64
+runs, but it is **disabled by default** because it causes catastrophic
+cancellation in float32.
 
 ---
 
@@ -394,6 +447,8 @@ By participating you agree to abide by its terms.
 ## Security
 
 Report vulnerabilities to **sachncs@gmail.com** — see [SECURITY.md](SECURITY.md).
+
+---
 
 ## Citation
 

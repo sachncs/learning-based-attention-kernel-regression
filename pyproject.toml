@@ -10,7 +10,7 @@ readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.9"
 authors = [
-    {name = "LAKER Contributors"}
+    {name = "Sachin", email = "sachncs@gmail.com"}
 ]
 keywords = [
     "kernel regression",
@@ -54,10 +54,10 @@ viz = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/sachn-cs/laker"
+Homepage = "https://github.com/sachncs/laker"
 Documentation = "https://laker.readthedocs.io"
-Repository = "https://github.com/sachn-cs/laker"
-Issues = "https://github.com/sachn-cs/laker/issues"
+Repository = "https://github.com/sachncs/laker"
+Issues = "https://github.com/sachncs/laker/issues"
 
 [project.scripts]
 laker = "laker.__main__:main"
