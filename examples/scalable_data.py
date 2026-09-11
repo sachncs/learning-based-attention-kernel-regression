@@ -47,7 +47,9 @@ import pyarrow.parquet as pq
 logger = logging.getLogger(__name__)
 
 DATASET = "KR-init/Spectrum-Cartography-256x256-UCF-50K"
+DATASET_REVISION = os.environ.get("LAKER_UCF50K_REVISION", "main")
 SIDE = 256
+MANIFEST_FILENAME = "MANIFEST.json"
 PIXELS = SIDE * SIDE
 COLUMNS = ("building_mask", "tx_origin", "path_loss")
 UNITS = "path_loss_dBm"
@@ -85,6 +87,7 @@ class ScalableData:
     """Download, verify, extract, index, clean, transform and load UCF-50K."""
 
     source = DATASET
+    revision = DATASET_REVISION
     side = SIDE
     units = UNITS
 
@@ -124,6 +127,7 @@ class ScalableData:
                 repo_id=DATASET,
                 filename=name,
                 repo_type="dataset",
+                revision=DATASET_REVISION,
                 local_dir=data_dir,
             )
             return name, os.path.getsize(local), "downloaded"
@@ -143,7 +147,26 @@ class ScalableData:
         stats["bytes_total"] = sum(
             entry["size"] for entry in stats.values() if isinstance(entry, dict)
         )
+        ScalableData.write_manifest(data_dir, stats)
         return stats
+
+    @staticmethod
+    def write_manifest(data_dir: str, stats: dict) -> str:
+        """Write a pinned-revision manifest to ``<data_dir>/MANIFEST.json``."""
+        os.makedirs(data_dir, exist_ok=True)
+        manifest_path = os.path.join(data_dir, MANIFEST_FILENAME)
+        manifest = {
+            "dataset": DATASET,
+            "revision": DATASET_REVISION,
+            "expected_size": EXPECTED_SIZE,
+            "files": {
+                name: entry for name, entry in stats.items() if isinstance(entry, dict)
+            },
+        }
+        with open(manifest_path, "w", encoding="utf-8") as handle:
+            json.dump(manifest, handle, indent=2, sort_keys=True)
+        logger.info("Wrote pinned manifest %s (revision=%s)", manifest_path, DATASET_REVISION)
+        return manifest_path
 
     @staticmethod
     def extract(

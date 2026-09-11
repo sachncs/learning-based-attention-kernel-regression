@@ -1,5 +1,8 @@
 """Tests for :mod:`laker.distributed`."""
 
+from unittest.mock import patch
+
+import pytest
 import torch
 
 from laker.distributed import Distributed
@@ -64,7 +67,53 @@ class TestSlicing:
             Exact(embeddings=e[: n // 2], lam=0.1, dtype=torch.float64),
             Exact(embeddings=e[n // 2 :], lam=0.1, dtype=torch.float64),
         ]
+        op.shards = [e[: n // 2], e[n // 2 :]]
+        op.slices = [(0, n // 2), (n // 2, n)]
         op.sizes = [n // 2, n - n // 2]
+        v = torch.randn(n, dtype=torch.float64)
+        out = op.matvec(v)
+        ref = torch.exp(e @ e.T) @ v + 0.1 * v
+        torch.testing.assert_close(out, ref, atol=1e-8, rtol=1e-8)
+
+
+@pytest.mark.cuda
+class TestMultiDeviceMocked:
+    """Multi-device path exercised under a CUDA-availability mock.
+
+    These tests don't require an actual GPU; they mock
+    ``torch.cuda.is_available`` and ``torch.cuda.device_count`` to drive
+    the multi-device code path. Deselected on CPU-only CI by default;
+    opt in with ``pytest -m cuda``.
+    """
+
+    def test_multi_device_construction_with_mocked_cuda(self):
+        n = 8
+        e = torch.randn(n, 4, dtype=torch.float64)
+        with (
+            patch("torch.cuda.is_available", return_value=True),
+            patch("torch.cuda.device_count", return_value=2),
+            patch.object(Distributed, "shard", lambda self, x: None),
+        ):
+            op = Distributed(embeddings=e, lam=0.1, dtype=torch.float64)
+        assert op.single is False
+        assert len(op.devices) == 2
+
+    def test_multi_device_matvec_matches_reference(self):
+        from laker.kernel import Exact
+
+        n = 10
+        e = torch.randn(n, 4, dtype=torch.float64)
+
+        op = Distributed(embeddings=e, lam=0.1, dtype=torch.float64)
+        op.single = False
+        op.devices = [torch.device("cpu"), torch.device("cpu")]
+        op.ops = [
+            Exact(embeddings=e[:5], lam=0.1, dtype=torch.float64, device=torch.device("cpu")),
+            Exact(embeddings=e[5:], lam=0.1, dtype=torch.float64, device=torch.device("cpu")),
+        ]
+        op.shards = [e[:5], e[5:]]
+        op.slices = [(0, 5), (5, n)]
+        op.sizes = [5, 5]
         v = torch.randn(n, dtype=torch.float64)
         out = op.matvec(v)
         ref = torch.exp(e @ e.T) @ v + 0.1 * v

@@ -92,6 +92,18 @@ class TestPCG:
         pcg.solve(lambda v: A @ v, lambda v: v, rhs)
         assert pcg.iterations > 0
 
+    def test_float32_well_conditioned_converges(self):
+        torch.manual_seed(0)
+        n = 1000
+        A = torch.rand(n, n, dtype=torch.float32)
+        A = A @ A.T + torch.eye(n, dtype=torch.float32)
+        rhs = torch.randn(n, dtype=torch.float32)
+        pcg = PCG(tol=1e-5, max_iter=500, verbose=False)
+        _, status = pcg.solve(lambda v: A @ v, lambda v: v, rhs)
+        assert status.converged, (
+            f"float32 PCG failed: reason={status.reason}, res={status.residual}"
+        )
+
 
 class TestDescent:
     def test_solves_simple_system(self):

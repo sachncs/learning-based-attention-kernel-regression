@@ -58,6 +58,7 @@ Homepage = "https://github.com/sachncs/laker"
 Issues = "https://github.com/sachncs/laker/issues"
 Repository = "https://github.com/sachncs/laker"
 Changelog = "https://github.com/sachncs/laker/blob/master/CHANGELOG.md"
+Documentation = "https://sachncs.github.io/laker/"
 
 [project.scripts]
 laker = "laker.cli:CLI.run"

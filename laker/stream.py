@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Optional
 
+import numpy as np
 import torch
 
 if TYPE_CHECKING:
@@ -28,6 +29,7 @@ class Stream:
         forget: float = 1.0,
         threshold: int = 100,
         seed: Optional[int] = None,
+        autofit: bool = True,
     ) -> "Laker":
         """Append new observations and re-solve with a warm start.
 
@@ -36,25 +38,55 @@ class Stream:
             x_new: New inputs of shape ``(m, d)``.
             y_new: New targets of shape ``(m,)``.
             forget: Scalar in ``[0, 1]`` scaling the previous ``alpha``.
-            threshold: Max cumulative new points before forcing a refit.
+            threshold: Max cumulative new points before triggering a refit.
             seed: Optional seed for the preconditioner's random probes.
+            autofit: When ``True`` (default) and the threshold is exceeded,
+                automatically concatenate all known data and refit. When
+                ``False``, raise ``RuntimeError`` instead.
         """
+        from laker.backend import Backend
         from laker.check import Check
+        from laker.math import Math
 
         if model.coef is None or model.embed is None:
             raise RuntimeError("Model has not been fitted. Call fit() before update().")
+
+        if seed is not None:
+            torch.manual_seed(int(seed))
+            np.random.seed(int(seed))
+            Math.seed_set(int(seed))
+            Backend.seed(int(seed))
 
         x_new = Check.x(Check.tensor(x_new, device=model.device, dtype=model.dtype), "x_new")
         y_new = Check.y(Check.tensor(y_new, device=model.device, dtype=model.dtype), "y_new")
 
         m = x_new.shape[0]
-        total = getattr(model, "_partial_count", 0) + m
+        total = model.partial_count + m
 
         if total >= threshold:
-            model.partial_count = 0
-            raise RuntimeError(
-                "update threshold exceeded. Concatenate all data and call fit() for a full refit."
+            if not autofit:
+                model.partial_count = 0
+                raise RuntimeError(
+                    "update threshold exceeded. Concatenate all data and call fit() "
+                    "for a full refit."
+                )
+            all_x = (
+                torch.cat([model.x_train, x_new], dim=0)
+                if model.x_train is not None
+                else x_new
             )
+            all_y = (
+                torch.cat([model.y_train, y_new])
+                if model.y_train is not None
+                else y_new
+            )
+            warm_was = model.warm
+            model.warm = True
+            try:
+                model.fit(all_x, all_y, seed=seed)
+            finally:
+                model.warm = warm_was
+            return model
 
         model.partial_count = total
 
@@ -69,7 +101,7 @@ class Stream:
         model.kernel = kernel
 
         old_alpha = model.coef * forget
-        y_old = getattr(model, "_y_train", None)
+        y_old = model.y_train
         if y_old is None:
             y_old = torch.zeros(old_n, device=self.core.device, dtype=self.core.dtype)
         y_ext = torch.cat([y_old, y_new])
@@ -86,11 +118,10 @@ class Stream:
             model.prec = prec
             model.coef, model.iters = self.core.solve(kernel, prec, y_ext, x0=x0)
         model.y_train = y_ext
-        model.x_train = (
-            torch.cat([getattr(model, "_x_train", x_new[:0]), x_new], dim=0)
-            if getattr(model, "_x_train", None) is not None
-            else x_new
-        )
+        if model.x_train is not None:
+            model.x_train = torch.cat([model.x_train, x_new], dim=0)
+        else:
+            model.x_train = x_new
 
         if self.core.verbose:
             logger.info(

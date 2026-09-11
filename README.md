@@ -224,7 +224,9 @@ exposes the building blocks under single-word names:
 | `laker.cli` | `CLI` |
 
 Per-module documentation lives under [docs/api/](docs/api/). Algorithm
-notes live under [docs/algorithms/](docs/algorithms/).
+notes live under [docs/algorithms/](docs/algorithms/). The full
+documentation site is published at
+<https://sachncs.github.io/laker/>.
 
 ---
 
@@ -356,6 +358,26 @@ chore: update ruff config
 
 ---
 
+## Choosing a kernel
+
+The trade-off between the low-rank and exact kernels is summarised
+below. The thresholds come from the UCF-50K sweep under
+`outputs/scalable/`.
+
+| Regime (n) | Default `kernel_type` | Why |
+|------------|----------------------|-----|
+| `n ≤ 5_000` | `exact` | Memory ≈ 100 MB at float32; the exact path is fastest and most accurate. |
+| `5_000 < n ≤ 50_000` | `nystrom` with `landmarks ≈ 0.1 * n` | Low-rank matvec; matches `exact` to within 5 % relative error on UCF-50K. |
+| `n > 50_000` | `fourier` with `features ≈ 2_000` | Cheaper than Nyström at very large n; some accuracy loss on fast-growing exponential kernels. |
+| `embed_dim ≤ 4` only | `grid` (SKI) | Product grid is only practical in low dimensions. |
+
+Cross-reference: the headline `10.38 ± 0.91 dB` UCF-50K number in the
+[Headline result](#headline-result) section was produced with
+`kernel_type="nystrom"` and `landmarks=100` against the pinned
+snapshot recorded in `data/ucf50k/MANIFEST.json`.
+
+---
+
 ## Limitations
 
 1. **PCG may not converge within `pcg_max`.** On very ill-conditioned
@@ -371,7 +393,8 @@ chore: update ruff config
    and RFF reduce matvec cost but can have high relative error on the
    fast-growing exponential kernel. They are best used for very large
    `n` where exact evaluation is infeasible, or when speed dominates
-   accuracy.
+   accuracy. See *Choosing a kernel* above for the regime that each
+   kernel handles well.
 
 4. **SKI grid grows exponentially with `embed_dim`.** Because SKI builds
    a product grid in the embedding space, the grid size scales as

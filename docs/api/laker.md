@@ -45,7 +45,7 @@ print(Laker.__module__)  # "laker.model"
 
 `__version__` follows [Semantic Versioning](https://semver.org/).
 The current development version is `0.5.0+local`. See
-[CHANGELOG.md](https://github.com/sachncs/learning-based-attention-kernel-regression/blob/master/CHANGELOG.md)
+[CHANGELOG.md](https://github.com/sachncs/laker/blob/master/CHANGELOG.md)
 for the full history.
 
 ## What's NOT in the public surface

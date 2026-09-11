@@ -133,7 +133,10 @@ class PCG:
             av = op(p)
             pap = torch.dot(p, av).item()
             eps_bound = self.eps if self.eps is not None else torch.finfo(p.dtype).eps ** 0.5
-            if pap <= -eps_bound * torch.linalg.norm(p).item() * torch.linalg.norm(av).item():
+            norm_p = torch.linalg.norm(p).item()
+            norm_av = torch.linalg.norm(av).item()
+            tol_scale = max(eps_bound * norm_p * norm_p, eps_bound * norm_p * norm_av)
+            if pap <= -tol_scale:
                 raise RuntimeError(
                     f"PCG breakdown at iteration {it}: non-positive curvature detected "
                     "(p^T A p <= 0)."
@@ -191,9 +194,10 @@ class PCG:
             av = op(p)
             pap = torch.sum(p * av, dim=0)
             eps_bound = self.eps if self.eps is not None else torch.finfo(p.dtype).eps ** 0.5
-            if torch.any(
-                pap <= -eps_bound * torch.linalg.norm(p, dim=0) * torch.linalg.norm(av, dim=0)
-            ):
+            norm_p = torch.linalg.norm(p, dim=0)
+            norm_av = torch.linalg.norm(av, dim=0)
+            tol_scale = torch.maximum(eps_bound * norm_p * norm_p, eps_bound * norm_p * norm_av)
+            if torch.any(pap <= -tol_scale):
                 raise RuntimeError(
                     f"PCG breakdown at iteration {it}: non-positive curvature detected."
                 )

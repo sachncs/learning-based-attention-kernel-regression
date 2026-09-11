@@ -719,6 +719,8 @@ class Scalable:
         metrics = {
             "dataset": {
                 "source": ScalableData.source,
+                "revision": ScalableData.revision,
+                "data_version": getattr(ScalableData, "revision", "main"),
                 "maps": len(entries),
                 "fingerprint": fingerprint,
             },

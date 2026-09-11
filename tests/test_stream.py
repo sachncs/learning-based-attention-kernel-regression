@@ -22,6 +22,23 @@ class TestUpdate:
         assert m.coef.shape[0] == n + 5
         assert m.embed.shape[0] == n + 5
 
+    def test_update_matches_fresh_fit_on_concatenated_data(self):
+        torch.manual_seed(0)
+        n = 20
+        x = torch.rand(n, 2, dtype=torch.float64) * 100
+        y = torch.sin(x[:, 0] / 50)
+        m = Laker(embed_dim=4, dtype=torch.float64, verbose=False)
+        m.fit(x, y)
+
+        x_new = torch.rand(5, 2, dtype=torch.float64) * 100
+        y_new = torch.sin(x_new[:, 0] / 50)
+        m.update(x_new, y_new, threshold=100, seed=0)
+
+        ref = Laker(embed_dim=4, dtype=torch.float64, verbose=False)
+        ref.fit(torch.cat([x, x_new]), torch.cat([y, y_new]))
+        torch.testing.assert_close(m.coef, ref.coef, atol=1e-3, rtol=1e-3)
+        torch.testing.assert_close(m.y_train, torch.cat([y, y_new]))
+
     def test_update_rejects_unfitted(self):
         m = Laker(embed_dim=4, dtype=torch.float64, verbose=False)
         x = torch.rand(5, 2, dtype=torch.float64)
@@ -38,7 +55,34 @@ class TestUpdate:
         x_big = torch.rand(150, 2, dtype=torch.float64) * 100
         y_big = torch.sin(x_big[:, 0] / 50)
         with pytest.raises(RuntimeError, match="threshold"):
-            m.update(x_big, y_big, threshold=100)
+            m.update(x_big, y_big, threshold=100, autofit=False)
+
+    def test_update_autofits_when_threshold_exceeded(self):
+        torch.manual_seed(0)
+        x = torch.rand(20, 2, dtype=torch.float64) * 100
+        y = torch.sin(x[:, 0] / 50)
+        m = Laker(embed_dim=4, dtype=torch.float64, verbose=False)
+        m.fit(x, y)
+        x_big = torch.rand(150, 2, dtype=torch.float64) * 100
+        y_big = torch.sin(x_big[:, 0] / 50)
+        m.update(x_big, y_big, threshold=100)
+        assert m.coef.shape[0] == 20 + 150
+        assert torch.isfinite(m.coef).all()
+
+    def test_update_reproducible_with_seed(self):
+        torch.manual_seed(0)
+        x = torch.rand(20, 2, dtype=torch.float64) * 100
+        y = torch.sin(x[:, 0] / 50)
+        m1 = Laker(embed_dim=4, dtype=torch.float64, verbose=False)
+        m2 = Laker(embed_dim=4, dtype=torch.float64, verbose=False)
+        m1.fit(x, y)
+        m2.fit(x, y)
+        x_new = torch.rand(5, 2, dtype=torch.float64) * 100
+        y_new = torch.sin(x_new[:, 0] / 50)
+        m1.update(x_new, y_new, threshold=100, seed=42)
+        m2.update(x_new, y_new, threshold=100, seed=42)
+        torch.testing.assert_close(m1.coef, m2.coef)
+        assert m1.prec.iso == m2.prec.iso
 
     def test_update_shape_validation(self):
         torch.manual_seed(0)

@@ -2,62 +2,82 @@
 
 Learning-based Attention Kernel Regression for large-scale spectrum cartography.
 
-## Package Structure
+See the project root `README.md` and `docs/` for the canonical
+documentation, examples, and API reference. The current module layout
+(after the public-API rename) is documented in
+[`laker/__init__.py`](../laker/__init__.py).
 
-| Module | Class | Purpose |
-|--------|-------|---------|
-| `model.py` | `Laker` | High-level sklearn-compatible estimator. |
-| `kernel.py` | `Kernel` (+ `Exact`, `Nystrom`, `Fourier`, `Neighbors`, `Grid`, `Hybrid`, `Spectrum`, `Distribute`) | Exact and approximate kernel operators. |
-| `preconditioner.py` | `Preconditioner` (+ `CCCP`, `Adaptive`, `Jacobi`) | Learned data-dependent preconditioners. |
-| `solve.py` | `Solve` (+ `PCG`, `Descent`) | Preconditioned conjugate gradient and gradient descent. |
-| `embed.py` | `Embed` (+ `Position`, `Visual`) | Embedding modules. |
-| `search.py` | `Search` | Grid and Bayesian hyperparameter search. |
-| `fit.py` | `Fit` | Learned embeddings, correction, calibration, tuning. |
-| `stream.py` | `Stream` | Online updates, regularisation paths, continuation. |
-| `implicit.py` | `Implicit` | Hypergradient adjoint. |
-| `plot.py` | `Plot` | Radio-map and convergence plotting. |
-| `data.py` | `Data` | Synthetic radio-field generation and grid creation. |
-| `helpers.py` | `Helpers` | Math/RNG helpers. |
-| `backend.py` | `Backend` | Device/dtype/env management. |
-| `base.py` | `Base` | Validation and tensor coercion. |
-| `cli.py` | `CLI` | CLI handlers. |
-
-## Quick Start
+## Quick start
 
 ```python
 import torch
 from laker import Laker
 
-locations = torch.rand(200, 2) * 100.0
-measurements = torch.randn(200)
+torch.manual_seed(0)
+locations = torch.rand(200, 2, dtype=torch.float64) * 100.0
+measurements = torch.sin(locations[:, 0] / 50.0)
 
-model = Laker(embedding_dim=10, regularization=1e-2)
+model = Laker(embed_dim=10, lam=1e-2, dtype=torch.float64, verbose=False)
 model.fit(locations, measurements)
 
-query = torch.rand(1000, 2) * 100.0
+query = torch.rand(1000, 2, dtype=torch.float64) * 100.0
 predictions = model.predict(query)
 ```
 
-## Kernel Approximations
+## Kernel approximations
 
-The `kernel` argument controls the operator:
+The `kernel_type` argument selects the operator:
 
 - `"exact"` — exact attention kernel (default).
-- `"nystrom"` — Nyström low-rank approximation.
-- `"fourier"` — Random Fourier features.
-- `"neighbors"` — sparse k-NN approximation.
-- `"grid"` — Structured Kernel Interpolation.
-- `"spectrum"` — Spectral shaping.
+- `"nystrom"` — Nyström low-rank approximation (`landmarks=k`).
+- `"fourier"` — Random Fourier features (`features=k`).
+- `"neighbors"` — sparse k-NN approximation (`neighbors=k`).
+- `"grid"` — Structured Kernel Interpolation (`grid_size=k`).
+- `"spectrum"` — Spectral shaping (`knots=k`).
 - `"hybrid"` — Two-scale combined approximation.
 
 Example:
 
 ```python
-model = Laker(kernel="nystrom", landmarks=100)
+model = Laker(
+    kernel_type="nystrom",
+    landmarks=100,
+    dtype=torch.float64,
+    verbose=False,
+)
 model.fit(locations, measurements)
 ```
 
-## Design Principles
+## Public API
+
+The single top-level export is `Laker`. Secondary symbols live behind
+their modules:
+
+| Module | Symbols |
+|--------|---------|
+| `laker.backend` | `Backend` |
+| `laker.check` | `Check` |
+| `laker.core` | `Core` |
+| `laker.corrector` | `Corrector` |
+| `laker.data` | `Data` |
+| `laker.distributed` | `Distributed` |
+| `laker.embed` | `Embed`, `Position`, `Visual` |
+| `laker.executor` | `Executor` |
+| `laker.implicit` | `hypergradient` |
+| `laker.kernel` | `Exact`, `Nystrom`, `Fourier`, `Neighbors`, `Grid`, `Hybrid`, `Spectrum`, `Shaper`, `exp_safe` |
+| `laker.math` | `Math`, `GP`, `pdf_np`, `cdf_np` |
+| `laker.plot` | `Plot` |
+| `laker.prec` | `CCCP`, `Adaptive`, `apply_core` |
+| `laker.search` | `Search` |
+| `laker.bilevel` | `Bilevel` |
+| `laker.solve` | `PCG`, `Descent`, `Jacobi`, `Report` |
+| `laker.store` | `Store` |
+| `laker.stream` | `Stream` |
+| `laker.train` | `Trainer` |
+| `laker.bench` | `Bench`, `SolveBench`, `BaseBench`, `bench`, `bench_all` |
+| `laker.cli` | `CLI` |
+
+## Design principles
 
 - **One primary class per module**: every module exports a single
   public class; helpers exist as `@staticmethod`.

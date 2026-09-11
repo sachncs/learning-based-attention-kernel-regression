@@ -298,12 +298,13 @@ class Core:
         """Solve ``(K + lambda I) alpha = rhs`` with PCG."""
         pcg = PCG(tol=self.pcg_tol, max_iter=self.pcg_max, verbose=self.verbose)
         with Backend.autocast():
-            alpha, _status = pcg.solve(
+            alpha, status = pcg.solve(
                 op=kernel_op.matvec,
                 prec=prec_op.apply,
                 rhs=rhs,
                 x0=x0,
             )
+        self.last_report = status
         if self.verbose:
             rel = (
                 torch.linalg.norm(kernel_op.matvec(alpha) - rhs).item()
@@ -412,7 +413,15 @@ class Core:
                 k_tq = kernel_op.eval(embed, query_embed)
                 if k_tq.is_sparse:
                     k_tq = k_tq.to_dense()
-                v, _ = pcg.solve(op=kernel_op.matvec, prec=prec_op.apply, rhs=k_tq)
+                v, status = pcg.solve(op=kernel_op.matvec, prec=prec_op.apply, rhs=k_tq)
+                if not status.converged:
+                    logger.warning(
+                        "variance PCG did not converge (reason=%s, residual=%.3e); "
+                        "returning NaN.",
+                        status.reason,
+                        status.residual,
+                    )
+                    return torch.full_like(var, float("nan"))
                 k_diag_mat = kernel_op.eval(query_embed, query_embed)
                 if k_diag_mat.is_sparse:
                     k_diag_mat = k_diag_mat.to_dense()
@@ -425,7 +434,20 @@ class Core:
                     k_tc = kernel_op.eval(embed, q_c)
                     if k_tc.is_sparse:
                         k_tc = k_tc.to_dense()
-                    v_c, _ = pcg.solve(op=kernel_op.matvec, prec=prec_op.apply, rhs=k_tc)
+                    v_c, status_c = pcg.solve(
+                        op=kernel_op.matvec, prec=prec_op.apply, rhs=k_tc
+                    )
+                    if not status_c.converged:
+                        logger.warning(
+                            "variance PCG did not converge on chunk [%d:%d] "
+                            "(reason=%s, residual=%.3e); returning NaN.",
+                            start,
+                            end,
+                            status_c.reason,
+                            status_c.residual,
+                        )
+                        var[start:end] = float("nan")
+                        continue
                     k_diag_mat = kernel_op.eval(q_c, q_c)
                     if k_diag_mat.is_sparse:
                         k_diag_mat = k_diag_mat.to_dense()

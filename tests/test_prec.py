@@ -88,6 +88,26 @@ class TestCCCP:
         torch.testing.assert_close(p1.basis, p2.basis)
         torch.testing.assert_close(p1.evals, p2.evals)
 
+    def test_apply_core_clamps_zero_iso(self):
+        from laker.prec import apply_core
+
+        basis = torch.eye(4, dtype=torch.float64)
+        evals = torch.tensor([1.0, 2.0, 3.0, 4.0], dtype=torch.float64)
+        evecs = torch.eye(4, dtype=torch.float64)
+        x = torch.ones(4, dtype=torch.float64)
+        out = apply_core(x, 0.0, basis, evals, evecs, eps=1e-12)
+        assert torch.isfinite(out).all()
+
+    def test_apply_core_clamps_negative_iso(self):
+        from laker.prec import apply_core
+
+        basis = torch.eye(4, dtype=torch.float64)
+        evals = torch.tensor([1.0, 2.0, 3.0, 4.0], dtype=torch.float64)
+        evecs = torch.eye(4, dtype=torch.float64)
+        x = torch.ones(4, dtype=torch.float64)
+        out = apply_core(x, -1.0, basis, evals, evecs, eps=1e-12)
+        assert torch.isfinite(out).all()
+
 
 class TestAdaptive:
     def test_picks_jacobi_for_well_conditioned(self):

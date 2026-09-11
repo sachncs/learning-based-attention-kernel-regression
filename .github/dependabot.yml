@@ -52,11 +52,6 @@ updates:
         applies-to: version-updates
         patterns:
           - "pytest*"
-          - "black"
-          - "isort"
-          - "flake8"
           - "mypy"
           - "hypothesis"
-          - "sphinx*"
-          - "myst-parser"
           - "matplotlib"

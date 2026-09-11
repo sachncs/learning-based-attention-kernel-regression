@@ -111,9 +111,9 @@ Runnable examples.
   against the full UCF-50K corpus (the SOTA-positioning baseline).
 
 ### External
-- [GitHub repository](https://github.com/sachncs/learning-based-attention-kernel-regression)
+- [GitHub repository](https://github.com/sachncs/laker)
 - [Paper on arXiv](https://arxiv.org/abs/2604.25138)
-- [Issue tracker](https://github.com/sachncs/learning-based-attention-kernel-regression/issues)
+- [Issue tracker](https://github.com/sachncs/laker/issues)
 
 ## Project layout
 
@@ -152,11 +152,10 @@ docs/                  # this documentation
 ## Conventions
 
 - **Naming.** Public symbols are single-word, no underscores. Examples:
-  `Laker` (not `LAKERRegressor`), `Fit` not `fit_with_search`,
-  `coef` not `lambda_reg`, `update` not `partial_fit`.
-- **State.** A fitted `Laker` exposes fitted state with the
-  sklearn-style trailing underscore: `coef_`, `embed_`, `kernel_`,
-  `prec_`, `encoder_`, `inputs_`, `targets_`, `iters_`.
+  `Laker`, `coef`, `update`.
+- **State.** A fitted `Laker` exposes fitted state as plain names:
+  `coef`, `embed`, `kernel`, `prec`, `encoder`, `inputs`, `targets`,
+  `iters`.
 - **Dtype.** The `dtype` parameter is required when the input is a
   numpy array; with a `torch.Tensor` the model uses the tensor's dtype.
 - **Device.** All tensors must live on `Backend.device`. The model does

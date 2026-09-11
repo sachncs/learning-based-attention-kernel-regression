@@ -226,6 +226,36 @@ class TestVariance:
             m.variance(torch.rand(5, 2, dtype=torch.float64))
 
 
+class TestReport:
+    def test_report_populated_after_fit(self):
+        torch.manual_seed(0)
+        x = torch.rand(30, 2, dtype=torch.float64) * 100
+        y = torch.sin(x[:, 0] / 50)
+        m = Laker(embed_dim=4, dtype=torch.float64, verbose=False)
+        assert m.report is None
+        m.fit(x, y)
+        assert m.report is not None
+        assert m.report.converged
+        assert m.report.reason == "converged"
+        assert m.report.iterations >= 1
+
+    def test_report_records_max_iter_when_cap_hit(self):
+        torch.manual_seed(0)
+        x = torch.rand(20, 2, dtype=torch.float64) * 100
+        y = torch.sin(x[:, 0] / 50)
+        m = Laker(
+            embed_dim=4,
+            dtype=torch.float64,
+            pcg_max=2,
+            pcg_tol=1e-30,
+            verbose=False,
+        )
+        m.fit(x, y)
+        assert m.report is not None
+        assert not m.report.converged
+        assert m.report.reason == "max_iter"
+
+
 class TestScore:
     def test_score_perfect_fit(self):
         torch.manual_seed(0)

@@ -1,0 +1,38 @@
+name: GPU CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test-cuda:
+    name: test-cuda
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.12"]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - name: Smoke import
+        run: |
+          python -c "import torch; print('torch', torch.__version__, 'cuda', torch.cuda.is_available())"
+      - name: Run cuda-marked tests
+        run: |
+          pip install -e ".[dev]"
+          pytest tests/test_distributed.py -v -m cuda --tb=short

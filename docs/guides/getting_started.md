@@ -13,8 +13,8 @@ pip install laker
 From source:
 
 ```bash
-git clone https://github.com/sachncs/learning-based-attention-kernel-regression
-cd learning-based-attention-kernel-regression
+git clone https://github.com/sachncs/laker
+cd laker
 pip install -e ".[dev,viz]"
 ```
 

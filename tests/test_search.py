@@ -70,3 +70,15 @@ class TestBayes:
         assert m.lam > 0
         assert m.gamma >= 0
         assert m.num > 0
+
+    def test_bayes_reproducible_with_seed(self):
+        torch.manual_seed(0)
+        x = torch.rand(30, 2, dtype=torch.float64) * 100
+        y = torch.sin(x[:, 0] / 50)
+        m1 = Laker(embed_dim=4, dtype=torch.float64, verbose=False)
+        m2 = Laker(embed_dim=4, dtype=torch.float64, verbose=False)
+        m1.bayes(x, y, val=0.2, n_calls=5, n_init=3, seed=42)
+        m2.bayes(x, y, val=0.2, n_calls=5, n_init=3, seed=42)
+        assert m1.lam == m2.lam
+        assert m1.gamma == m2.gamma
+        assert m1.num == m2.num

@@ -145,3 +145,71 @@ class TestDeviceDtype:
         m2 = Laker.load(path)
         assert m2.dtype == torch.float64
         assert m2.coef.dtype == torch.float64
+
+    def test_load_preserves_float16(self, fitted_model, tmp_path):
+        m, x, _ = fitted_model
+        path = str(tmp_path / "model.pt")
+        m.save(path)
+        state = torch.load(path, weights_only=True)
+        state["dtype"] = "torch.float16"
+        torch.save(state, path)
+        m2 = Laker.load(path)
+        assert m2.dtype == torch.float16
+
+    def test_load_preserves_bfloat16_embed(self, fitted_model, tmp_path):
+        m, x, _ = fitted_model
+        path = str(tmp_path / "model.pt")
+        m.save(path)
+        state = torch.load(path, weights_only=True)
+        state["embed_dtype"] = "torch.bfloat16"
+        torch.save(state, path)
+        m2 = Laker.load(path)
+        assert m2.embed_dtype == torch.bfloat16
+
+    def test_load_unknown_dtype_raises(self, fitted_model, tmp_path):
+        m, x, _ = fitted_model
+        path = str(tmp_path / "model.pt")
+        m.save(path)
+        state = torch.load(path, weights_only=True)
+        state["dtype"] = "torch.float7"
+        torch.save(state, path)
+        with pytest.raises(ValueError, match="unsupported dtype"):
+            Store.load(path)
+
+    def test_load_missing_file_raises_with_path(self, tmp_path):
+        path = str(tmp_path / "missing.pt")
+        with pytest.raises(FileNotFoundError, match=path):
+            Store.load(path)
+
+    def test_load_non_laker_file_raises(self, tmp_path):
+        path = str(tmp_path / "not-laker.pt")
+        torch.save({"weight": torch.zeros(3)}, path)
+        with pytest.raises(ValueError, match="not a LAKER model file"):
+            Store.load(path)
+
+    def test_load_future_format_rejected(self, tmp_path):
+        path = str(tmp_path / "future.pt")
+        torch.save(
+            {
+                "format": 99,
+                "dtype": "torch.float32",
+                "embed_dim": 4,
+                "lam": 1e-2,
+            },
+            path,
+        )
+        with pytest.raises(ValueError, match="newer LAKER version"):
+            Store.load(path)
+
+    def test_load_missing_required_field(self, tmp_path):
+        path = str(tmp_path / "incomplete.pt")
+        torch.save(
+            {
+                "format": 2,
+                "dtype": "torch.float32",
+                "embed_dim": 4,
+            },
+            path,
+        )
+        with pytest.raises(KeyError, match="missing required field"):
+            Store.load(path)

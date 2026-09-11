@@ -34,9 +34,11 @@ def apply_core(
     basis: torch.Tensor,
     evals: torch.Tensor,
     evecs: torch.Tensor,
+    eps: float = 1e-12,
 ) -> torch.Tensor:
     """Core of the preconditioner apply ``P = Sigma^{-1/2}``."""
-    inv_sqrt_iso = iso ** (-0.5)
+    iso_safe = max(float(iso), eps)
+    inv_sqrt_iso = iso_safe ** (-0.5)
     proj = basis.T @ x
     coeffs = evecs.T @ proj
     if x.dim() == 1:
@@ -204,6 +206,12 @@ class CCCP:
         self.evals, self.evecs = Math.eigh(matrix_buf, eps=self.eps)
         # Reuse scratch buffer to avoid extra allocation.
 
+        if not (self.iso == self.iso) or self.iso <= 0.0:
+            raise RuntimeError(
+                f"CCCP preconditioner produced non-positive iso={self.iso!r} after "
+                f"{last_iter + 1} iterations; check gamma and the operator spectrum."
+            )
+
         if self.verbose:
             logger.info("CCCP preconditioner built in %d iterations", last_iter + 1)
         return self
@@ -214,7 +222,7 @@ class CCCP:
             raise RuntimeError("Preconditioner has not been built. Call build() first.")
         if x.dim() not in (1, 2):
             raise ValueError(f"x must be 1-D or 2-D, got shape {x.shape}")
-        return apply_core(x, self.iso, self.basis, self.evals, self.evecs)
+        return apply_core(x, self.iso, self.basis, self.evals, self.evecs, eps=self.eps)
 
     def dense(self) -> torch.Tensor:
         """Materialise the full dense preconditioner matrix (debug only)."""

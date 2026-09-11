@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional, Union
 
 import numpy as np
 import torch
@@ -31,6 +31,9 @@ from laker.search import Search
 from laker.store import Store
 from laker.stream import Stream
 from laker.train import Trainer
+
+if TYPE_CHECKING:
+    from laker.solve import Report
 
 logger = logging.getLogger(__name__)
 
@@ -82,6 +85,7 @@ class Laker:
         inputs: Training locations, shape ``(n, d)``.
         targets: Training observations, shape ``(n,)``.
         iters: Iterations used by the last PCG solve.
+        report: ``PCG.Report`` from the last fit's solve, ``None`` before fit.
     """
 
     PARAMS = (
@@ -263,6 +267,7 @@ class Laker:
         self.inputs: Optional[torch.Tensor] = None
         self.targets: Optional[torch.Tensor] = None
         self.iters: Optional[int] = None
+        self.report: Optional["Report"] = None
         self.corrector: Optional[nn.Module] = None
         self.x_train: Optional[torch.Tensor] = None
         self.y_train: Optional[torch.Tensor] = None
@@ -402,6 +407,7 @@ class Laker:
         self.inputs = x
         self.targets = y
         self.iters = iters
+        self.report = getattr(self.core, "last_report", None)
         self.x_train = x
         self.y_train = y
         self.partial_count = 0
@@ -510,8 +516,17 @@ class Laker:
         forget: float = 1.0,
         threshold: int = 100,
         seed: Optional[int] = None,
+        autofit: bool = True,
     ) -> "Laker":
-        return self.stream.update(self, x_new, y_new, forget=forget, threshold=threshold, seed=seed)
+        return self.stream.update(
+            self,
+            x_new,
+            y_new,
+            forget=forget,
+            threshold=threshold,
+            seed=seed,
+            autofit=autofit,
+        )
 
     def path(
         self,

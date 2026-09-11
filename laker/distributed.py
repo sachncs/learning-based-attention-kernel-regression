@@ -73,6 +73,8 @@ class Distributed:
             sizes[i] += 1
         self.sizes = sizes
         self.ops = []
+        self.shards = []
+        self.slices = []
         start = 0
         for device, sz in zip(self.devices, sizes):
             end = start + sz
@@ -85,6 +87,8 @@ class Distributed:
                 dtype=self.dtype,
             )
             self.ops.append(op)
+            self.shards.append(local)
+            self.slices.append((start, end))
             start = end
 
     def matvec(self, x: torch.Tensor) -> torch.Tensor:
@@ -92,33 +96,26 @@ class Distributed:
             return self.local_op.matvec(x)
 
         x_m = x.to(self.master)
-        full = torch.cat(
-            [op.embeddings.to(self.master) for op in self.ops],
-            dim=0,
-        )
         outs = []
-        start = 0
-        for op in self.ops:
-            device = op.embeddings.device
-            local = op.embeddings
-            sz = local.shape[0]
-            end = start + sz
-
+        chunk_size = 8192
+        for op, shard, (start, end) in zip(self.ops, self.shards, self.slices):
+            device = shard.device
             d_t = x_m.to(device)
-            full_d = full.to(device)
-
-            chunk_size = 8192
-            local_out = self.lam * d_t
+            local_out = self.lam * d_t[start:end]
             for j in range(0, self.size, chunk_size):
                 j_end = min(j + chunk_size, self.size)
-                gb = local @ full_d[j:j_end].T
+                if j >= start and j_end <= end:
+                    remote = shard[(j - start):(j_end - start)]
+                else:
+                    remote_full = torch.cat(self.shards, dim=0)
+                    remote = remote_full[j:j_end].to(device)
+                gb = shard @ remote.T
                 exp_safe(gb, out=gb, skip=False)
                 if d_t.dim() == 1:
-                    local_out[start:end].addmv_(gb, d_t[j:j_end])
+                    local_out.addmv_(gb, d_t[j:j_end])
                 else:
-                    local_out[start:end].addmm_(gb, d_t[j:j_end])
-            outs.append(local_out[start:end].to(self.master))
-            start = end
+                    local_out.addmm_(gb, d_t[j:j_end])
+            outs.append(local_out.to(self.master))
 
         return torch.cat(outs, dim=0)
 
@@ -131,10 +128,7 @@ class Distributed:
     def dense(self) -> torch.Tensor:
         if self.single:
             return self.local_op.dense()
-        full = torch.cat(
-            [op.embeddings.to(self.master) for op in self.ops],
-            dim=0,
-        )
+        full = torch.cat([shard.to(self.master) for shard in self.shards], dim=0)
         gram = full @ full.T
         exp_safe(gram, out=gram, skip=False)
         gram.diagonal().add_(self.lam)
@@ -149,7 +143,9 @@ class Distributed:
         if self.single:
             return self.local_op.eval(x, y, chunk=chunk)
         full = (
-            torch.cat([op.embeddings.to(self.master) for op in self.ops], dim=0) if y is None else y
+            torch.cat([shard.to(self.master) for shard in self.shards], dim=0)
+            if y is None
+            else y
         )
         gram = x @ full.T
         torch.exp(gram, out=gram)

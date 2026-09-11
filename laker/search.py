@@ -179,19 +179,23 @@ class Search:
             dtype=np.float64,
         )
 
-        def lh_sample(s: int) -> np.ndarray:
+        def lh_sample(s: int, rng: np.random.Generator) -> np.ndarray:
             d = bounds.shape[0]
             samples = np.zeros((s, d), dtype=np.float64)
             for i in range(d):
-                perm_np = np.random.permutation(s)
-                samples[:, i] = (perm_np + np.random.uniform(size=s)) / s
+                perm_np = rng.permutation(s)
+                samples[:, i] = (perm_np + rng.uniform(size=s)) / s
             return samples * (bounds[:, 1] - bounds[:, 0]) + bounds[:, 0]
+
+        bayes_rng = np.random.default_rng(
+            int(seed) if seed is not None else int(torch.initial_seed())
+        )
 
         x_obs = []
         y_obs = []
 
         for _ in range(n_init):
-            point = lh_sample(1)[0]
+            point = lh_sample(1, bayes_rng)[0]
             lam_v = float(point[0])
             gamma_v = float(point[1])
             num_v = int(round(float(point[2])))
@@ -221,7 +225,7 @@ class Search:
 
         for _ in range(n_calls - n_init):
             gp.fit(np.vstack(x_obs), np.array(y_obs, dtype=np.float64))
-            candidates = lh_sample(500)
+            candidates = lh_sample(500, bayes_rng)
             ei = gp.improve(candidates)
             next_point = candidates[int(np.argmax(ei))]
 

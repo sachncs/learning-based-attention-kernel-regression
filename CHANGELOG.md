@@ -28,6 +28,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ``docs/examples/scalable.md`` adds a "Positioning vs learned (CNN) baselines" section anchoring LAKER's 10.38 dB (≈10 % of the 99 dB range) against RadioUNet's reported ~1 dB on the analogous RadioMapSeer task (~1 % of range); notes that no leaderboard / published baseline exists on UCF-50K as of writing.
 - Registered ``paper`` and ``scalable`` / ``scalable_data`` in ``examples/__init__.py`` and across the documentation (``README.md``, ``docs/README.md``, ``docs/examples/README.md``).
 
+## [0.5.0] - 2026-08-11
+
+### Summary
+The 0.5.0 cycle is the public-API rename and the docs push. The
+single top-level export is now ``Laker`` (was ``LAKERRegressor``);
+module-level helper classes (``Store``, ``Stream``, ``Search``,
+``Trainer``, ``Math``, ``Check``, ``Backend``, ``Corrector``, etc.)
+were promoted to single-word canonical names; the fitted state uses
+plain names (``coef``, ``embed``, ``kernel``, ``prec``, ``encoder``,
+``inputs``, ``targets``, ``iters``) with no trailing underscores; and
+the codebase is now covered by 310+ tests, a 22-file ``docs/`` tree,
+two full reproducible example scripts (``paper.py`` reproduces the
+paper's Section V experiment; ``scalable.py`` runs the UCF-50K full
+sweep), and a positioning baseline that confirms LAKER's accuracy on
+UCF-50K is per-scene-conditioning driven, not cross-map learning.
+
+### Added
+- Renamed single top-level class to ``Laker`` (was ``LAKERRegressor``).
+- Renamed / promoted module helpers: ``Kernel`` is now a union type in
+  ``laker.kernel``; ``Nystrom``, ``Fourier``, ``Neighbors``, ``Grid``,
+  ``Hybrid``, ``Spectrum``, ``Shaper``, ``exp_safe`` are direct exports;
+  ``Preconditioner`` → ``CCCP`` / ``Adaptive``; ``Solve`` → ``PCG``;
+  ``Embed`` → ``Position`` / ``Visual``; ``Helpers`` → ``Math``; ``Base``
+  → ``Check``; ``Fit`` → ``Trainer``.
+- Compact rename map for the public API:
+  ``_partial_count`` → ``partial_count``, ``_x_train`` → ``x_train``,
+  ``_y_train`` → ``y_train``, ``_LAKERRegressor`` → ``Laker``,
+  ``embedding_dim`` → ``embed_dim``, ``regularization`` → ``lam``,
+  ``kernel`` → ``kernel_type``.
+- The package README is now a one-paragraph pointer; the canonical
+  README is at the repo root and the canonical API reference is in
+  ``docs/``.
+
+### Changed
+- The full ``CHANGELOG.md`` content above this entry was retroactively
+  promoted from ``[Unreleased]`` to ``[0.5.0]``; future cycles will
+  add their own ``[X.Y.Z]`` block.
+
 ### Changed
 - Promoted all semi-private (single-underscore-prefixed) names to public:
   - ``LAKERRegressor`` attributes: ``_core`` → ``core``, ``_search`` → ``search``, ``_streaming`` → ``streaming``, ``_trainer`` → ``trainer``, ``_persistence`` → ``persistence``.
@@ -284,7 +322,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Comprehensive test suite with 14+ tests.
 - Documentation and usage examples.
 
-[Unreleased]: https://github.com/sachncs/learning-based-attention-kernel-regression/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/sachncs/laker/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/sachncs/laker/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/sachncs/laker/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/sachncs/laker/compare/v0.0.1...v0.3.0
 [0.0.1]: https://github.com/sachncs/laker/releases/tag/v0.0.1

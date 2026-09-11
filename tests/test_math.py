@@ -228,3 +228,17 @@ class TestGP:
         candidates = np.array([[0.2, 0.5], [0.4, 0.5]])
         ei = gp.improve(candidates)
         assert (ei >= 0).all()
+
+    def test_transform_log_dims_in_unit_range(self):
+        bounds = np.array([[1e-4, 1.0], [0.0, 2.0]])
+        gp = GP(bounds, log=[0, 1])
+        out = gp.transform(np.array([[1e-2, 1.0]]))
+        assert out.shape == (1, 2)
+        assert (out > 0).all() and (out < 1).all()
+
+    def test_transform_mixed_log_linear(self):
+        bounds = np.array([[1e-3, 1.0], [0.0, 4.0]])
+        gp = GP(bounds, log=[0])
+        out = gp.transform(np.array([[1e-1, 2.0], [1e-2, 3.5]]))
+        assert out.shape == (2, 2)
+        assert (out > 0).all() and (out < 1).all()
